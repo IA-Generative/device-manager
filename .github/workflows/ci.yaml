@@ -1,0 +1,24 @@
+name: CI
+
+on:
+  pull_request:
+    types:
+    - opened
+    - reopened
+    - synchronize
+    - ready_for_review
+    branches:
+    - "**"
+  workflow_dispatch:
+
+jobs:
+  lint:
+    uses: ./.github/workflows/lint.yml
+
+  build:
+    permissions:
+      packages: write
+    uses: ./.github/workflows/build.yml
+    with:
+      tags: |
+        ghcr.io/ia-generative/device-service:pr-${{ github.event.pull_request.number }}
