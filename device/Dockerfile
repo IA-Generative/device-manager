@@ -26,6 +26,7 @@ FROM base AS builder
 
 COPY . .
 
+WORKDIR /app/device
 RUN CGO_ENABLED=0 GOOS=linux go build \
     -ldflags="-w -s" \
     -o /device-service ./cmd/server

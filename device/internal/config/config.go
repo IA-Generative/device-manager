@@ -51,25 +51,26 @@ type Config struct {
 	SMTPHost               string
 	SMTPPort               string
 	SMTPFrom               string
-	ApprovalTimeoutMinutes int // Délai d'expiration des devices pending_approval
+	SMTPAuthType           string // none | plain | login | crammd5
+	SMTPUsername           string
+	SMTPPassword           string
+	SMTPEncryption         string // none | starttls | tls
+	ApprovalTimeoutMinutes int    // Délai d'expiration des devices pending_approval
 }
 
 func Load() *Config {
-	keycloakURL := getEnv("KEYCLOAK_URL", "http://localhost:8081")
 	keycloakRealm := getEnv("KEYCLOAK_REALM", "myapp")
-	defaultJWKS := strings.TrimRight(keycloakURL, "/") + "/realms/" + keycloakRealm + "/protocol/openid-connect/certs"
 
 	return &Config{
 		Env:                 getEnv("ENV", "development"),
 		Port:                getEnv("PORT", "8080"),
 		DatabaseURL:         getEnv("DATABASE_URL", "postgres://device:device@localhost:5432/devicedb?sslmode=disable"),
 		RedisURL:            getEnv("REDIS_URL", "redis://localhost:6379"),
-		KeycloakURL:         keycloakURL,
 		KeycloakRealm:       keycloakRealm,
 		KeycloakClientID:    getEnv("KEYCLOAK_CLIENT_ID", "device-cli"),
 		KeycloakRedirectURI: getEnv("KEYCLOAK_REDIRECT_URI", "http://localhost:8082/"),
 		KeycloakPublicURI:   getEnv("KEYCLOAK_PUBLIC_URI", "http://localhost:8081/"),
-		JWKSEndpoint:        getEnv("JWKS_ENDPOINT", defaultJWKS),
+		JWKSEndpoint:        getEnv("JWKS_ENDPOINT", "http://keycloak/realms/myapp/protocol/openid-connect/certs"),
 		AttestationMode:     AttestationMode(getEnv("ATTESTATION_MODE", string(AttestationPreferHardware))),
 		// Re-attestation
 		ReattestIntervalHours:  parseInt(getEnv("REATTEST_INTERVAL_HOURS", "24"), 24),
@@ -88,6 +89,10 @@ func Load() *Config {
 		SMTPHost:               getEnv("SMTP_HOST", "localhost"),
 		SMTPPort:               getEnv("SMTP_PORT", "1025"),
 		SMTPFrom:               getEnv("SMTP_FROM", "device-service@localhost"),
+		SMTPAuthType:           getEnv("SMTP_AUTH_TYPE", "none"),
+		SMTPUsername:           getEnv("SMTP_USERNAME", ""),
+		SMTPPassword:           getEnv("SMTP_PASSWORD", ""),
+		SMTPEncryption:         getEnv("SMTP_ENCRYPTION", "none"),
 		ApprovalTimeoutMinutes: parseInt(getEnv("APPROVAL_TIMEOUT_MINUTES", "30"), 30),
 	}
 }

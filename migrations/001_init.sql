@@ -1,5 +1,5 @@
 -- ============================================================
--- Migration unique — idempotente (fusionne 001 + 002 + 003)
+-- Migration
 -- ============================================================
 
 CREATE EXTENSION IF NOT EXISTS "pgcrypto";
@@ -11,9 +11,6 @@ DO $$ BEGIN
     CREATE TYPE device_status AS ENUM ('active', 'suspended', 'revoked', 'pending_approval');
 EXCEPTION WHEN duplicate_object THEN NULL;
 END $$;
-
-ALTER TYPE device_status ADD VALUE IF NOT EXISTS 'suspended';
-ALTER TYPE device_status ADD VALUE IF NOT EXISTS 'pending_approval';
 
 -- ── Table principale ──────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS devices (
@@ -43,13 +40,6 @@ CREATE TABLE IF NOT EXISTS devices (
     approved_by    VARCHAR,
     approved_at    TIMESTAMP
 );
-
--- Colonnes ajoutées en 002/003 (no-op si la table vient d'être créée)
-ALTER TABLE devices ADD COLUMN IF NOT EXISTS trust_score    INT       DEFAULT 0;
-ALTER TABLE devices ADD COLUMN IF NOT EXISTS reattest_at    TIMESTAMP;
-ALTER TABLE devices ADD COLUMN IF NOT EXISTS reattest_count INT       DEFAULT 0;
-ALTER TABLE devices ADD COLUMN IF NOT EXISTS approved_by    VARCHAR;
-ALTER TABLE devices ADD COLUMN IF NOT EXISTS approved_at    TIMESTAMP;
 
 -- ── Index ─────────────────────────────────────────────────────
 CREATE INDEX IF NOT EXISTS idx_devices_user_id        ON devices (user_id);

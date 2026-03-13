@@ -1,0 +1,42 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "device-service.fullname" . }}
+  labels:
+    {{- include "device-service.labels" . | nindent 4 }}
+data:
+  ENV: {{ .Values.app.env | quote }}
+  PORT: {{ .Values.app.port | quote }}
+
+  # Keycloak / OIDC
+  KEYCLOAK_REALM: {{ .Values.app.keycloak.realm | quote }}
+  KEYCLOAK_CLIENT_ID: {{ .Values.app.keycloak.clientId | quote }}
+  KEYCLOAK_REDIRECT_URI: {{ .Values.app.keycloak.redirectUri | quote }}
+  KEYCLOAK_PUBLIC_URI: {{ .Values.app.keycloak.publicUri | quote }}
+  JWKS_ENDPOINT: {{ .Values.app.keycloak.jwksEndpoint | quote }}
+
+  # Attestation
+  ATTESTATION_MODE: {{ .Values.app.attestation.mode | quote }}
+  REATTEST_INTERVAL_HOURS: {{ .Values.app.attestation.reattestIntervalHours | toString | quote }}
+  REQUIRE_DEVICE_SIGNATURE: {{ .Values.app.attestation.requireDeviceSignature | toString | quote }}
+
+  # Risk thresholds
+  RISK_THRESHOLD_FULL: {{ .Values.app.risk.thresholdFull | toString | quote }}
+  RISK_THRESHOLD_LIMITED: {{ .Values.app.risk.thresholdLimited | toString | quote }}
+
+  # CORS
+  CORS_ALLOWED_ORIGINS: {{ .Values.app.cors.allowedOrigins | quote }}
+  CORS_ALLOWED_METHODS: {{ .Values.app.cors.allowedMethods | quote }}
+  CORS_ALLOWED_HEADERS: {{ .Values.app.cors.allowedHeaders | quote }}
+  CORS_EXPOSED_HEADERS: {{ .Values.app.cors.exposedHeaders | quote }}
+  CORS_ALLOW_CREDENTIALS: {{ .Values.app.cors.allowCredentials | toString | quote }}
+  CORS_MAX_AGE_SECONDS: {{ .Values.app.cors.maxAgeSeconds | toString | quote }}
+
+  # SMTP / device approval
+  SMTP_HOST: {{ .Values.app.smtp.host | quote }}
+  SMTP_PORT: {{ .Values.app.smtp.port | quote }}
+  SMTP_FROM: {{ .Values.app.smtp.from | quote }}
+  SMTP_ENCRYPTION: {{ .Values.app.smtp.encryption | default "none" | quote }}
+  SMTP_AUTH_TYPE: {{ .Values.app.smtp.authType | default "none" | quote }}
+  SMTP_USERNAME: {{ .Values.app.smtp.username | default "" | quote }}
+  APPROVAL_TIMEOUT_MINUTES: {{ .Values.app.smtp.approvalTimeoutMinutes | toString | quote }}

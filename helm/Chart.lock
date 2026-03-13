@@ -1,0 +1,9 @@
+dependencies:
+- name: valkey
+  repository: oci://registry-1.docker.io/cloudpirates
+  version: 0.18.0
+- name: cluster
+  repository: https://cloudnative-pg.io/charts
+  version: 0.6.0
+digest: sha256:d29ab75da4518daca0883ebfc45eabd5709f84091dac2effb7fbbdd397e2b68b
+generated: "2026-03-14T00:48:15.575855196+01:00"

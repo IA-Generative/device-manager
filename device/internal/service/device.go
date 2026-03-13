@@ -101,26 +101,10 @@ func (s *DeviceService) Register(ctx context.Context, req model.RegisterRequest)
 		return nil, errors.New("user_id is required in token for device registration")
 	}
 
-	// ─── Architecture A+B : déterminer le statut initial ──────────────────────
-	initialStatus := model.StatusActive
-	activeCount, err := s.repo.CountActiveByUser(ctx, req.UserID)
-	if err != nil {
-		s.logger.Error("failed to count active devices", zap.Error(err))
-		activeCount = 0
-	}
-
-	if activeCount == 0 {
-		// Premier device : enregistrement direct
-		s.logger.Info("first device registration — active directly",
-			zap.String("user_id", req.UserID))
-		initialStatus = model.StatusActive
-	} else {
-		// Architecture B : N-ième device → pending_approval + email challenge
-		s.logger.Info("additional device registration (Architecture B — email challenge)",
-			zap.String("user_id", req.UserID),
-			zap.Int("existing_active_devices", activeCount))
-		initialStatus = model.StatusPendingApproval
-	}
+	// Architecture B : pending_approval + email challenge
+	initialStatus := model.StatusPendingApproval
+	s.logger.Info("additional device registration (Architecture B — email challenge)",
+		zap.String("user_id", req.UserID))
 
 	device := &model.Device{
 		DeviceID:      deviceID,

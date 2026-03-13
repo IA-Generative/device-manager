@@ -1,0 +1,36 @@
+{{- if and .Values.adminer.enabled .Values.adminer.ingress.enabled }}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ include "device-service.fullname" . }}-adminer
+  labels:
+    {{- include "device-service.labels" . | nindent 4 }}
+    app.kubernetes.io/component: adminer
+  {{- with .Values.adminer.ingress.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  {{- if .Values.adminer.ingress.className }}
+  ingressClassName: {{ .Values.adminer.ingress.className }}
+  {{- end }}
+  {{- if .Values.adminer.ingress.tls }}
+  tls:
+    {{- toYaml .Values.adminer.ingress.tls | nindent 4 }}
+  {{- end }}
+  rules:
+    {{- range .Values.adminer.ingress.hosts }}
+    - host: {{ .host | quote }}
+      http:
+        paths:
+          {{- range .paths }}
+          - path: {{ .path }}
+            pathType: {{ .pathType }}
+            backend:
+              service:
+                name: {{ include "device-service.fullname" $ }}-adminer
+                port:
+                  number: {{ $.Values.adminer.service.port }}
+          {{- end }}
+    {{- end }}
+{{- end }}

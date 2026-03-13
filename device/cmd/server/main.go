@@ -47,7 +47,12 @@ func main() {
 
 	// Layers
 	repo := repository.NewDeviceRepository(pg)
-	emailSvc := service.NewEmailService(cfg.SMTPHost, cfg.SMTPPort, cfg.SMTPFrom)
+	emailSvc := service.NewEmailService(
+		cfg.SMTPHost, cfg.SMTPPort, cfg.SMTPFrom,
+		service.SMTPAuthType(cfg.SMTPAuthType),
+		cfg.SMTPUsername, cfg.SMTPPassword,
+		service.SMTPEncryption(cfg.SMTPEncryption),
+	)
 	svc := service.NewDeviceServiceWithConfig(repo, rdb, emailSvc, logger, cfg)
 	attestSvc := service.NewAttestationService(svc, cfg.AttestationMode, logger)
 	riskSvc := service.NewRiskService(svc, cfg.ReattestIntervalHours, logger)
