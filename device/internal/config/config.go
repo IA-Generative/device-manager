@@ -22,6 +22,15 @@ const (
 	AttestationRequireHardware AttestationMode = "require_hardware"
 )
 
+// ApprovalMethod définit un mécanisme d'approbation pour l'enrollment.
+type ApprovalMethod string
+
+const (
+	ApprovalAcr         ApprovalMethod = "acr"          // MFA via Keycloak (acr_values)
+	ApprovalEmail       ApprovalMethod = "email"        // Code OTP par email
+	ApprovalCrossDevice ApprovalMethod = "cross_device" // Approbation par un device de confiance
+)
+
 type Config struct {
 	Env                 string
 	Port                string
@@ -48,14 +57,24 @@ type Config struct {
 	CORSAllowCredentials bool
 	CORSMaxAgeSeconds    int
 	// Architecture B : Email challenge
-	SMTPHost               string
-	SMTPPort               string
-	SMTPFrom               string
-	SMTPAuthType           string // none | plain | login | crammd5
-	SMTPUsername           string
-	SMTPPassword           string
-	SMTPEncryption         string // none | starttls | tls
-	ApprovalTimeoutMinutes int    // Délai d'expiration des devices pending_approval
+	SMTPHost       string
+	SMTPPort       string
+	SMTPFrom       string
+	SMTPAuthType   string // none | plain | login | crammd5
+	SMTPUsername   string
+	SMTPPassword   string
+	SMTPEncryption string // none | starttls | tls
+	// ─── Enrollment Policy ───────────────────────────────────────────────────
+	AutoApproveFirstDevice bool             // true → 1er device auto-actif (Architecture A)
+	ApprovalMethods        []ApprovalMethod // acr, email, cross_device — n'importe quelle combinaison
+	CrossDeviceMinTrust    int              // Trust score min pour qu'un device puisse en approuver un autre
+	EmailChallengeTTL      int              // Durée de validité du code email (minutes)
+	AcrValues              string           // acr_values Keycloak exigé pour l'approbation ACR (ex: "urn:keycloak:acr:silver")
+	// ─── Trust scoring par méthode d'approbation (0-30) ──────────────────
+	TrustPointsFirstDevice int // Points pour le premier device auto-appouvé
+	TrustPointsEmail       int // Points pour approbation par code email
+	TrustPointsAcr         int // Points pour approbation via MFA Keycloak
+	TrustPointsCrossDevice int // Points pour approbation cross-device
 }
 
 func Load() *Config {
@@ -86,14 +105,24 @@ func Load() *Config {
 		CORSAllowCredentials: parseBool(getEnv("CORS_ALLOW_CREDENTIALS", "true"), true),
 		CORSMaxAgeSeconds:    parseInt(getEnv("CORS_MAX_AGE_SECONDS", "300"), 300),
 		// Architecture B : Email challenge
-		SMTPHost:               getEnv("SMTP_HOST", "localhost"),
-		SMTPPort:               getEnv("SMTP_PORT", "1025"),
-		SMTPFrom:               getEnv("SMTP_FROM", "device-service@localhost"),
-		SMTPAuthType:           getEnv("SMTP_AUTH_TYPE", "none"),
-		SMTPUsername:           getEnv("SMTP_USERNAME", ""),
-		SMTPPassword:           getEnv("SMTP_PASSWORD", ""),
-		SMTPEncryption:         getEnv("SMTP_ENCRYPTION", "none"),
-		ApprovalTimeoutMinutes: parseInt(getEnv("APPROVAL_TIMEOUT_MINUTES", "30"), 30),
+		SMTPHost:       getEnv("SMTP_HOST", "localhost"),
+		SMTPPort:       getEnv("SMTP_PORT", "1025"),
+		SMTPFrom:       getEnv("SMTP_FROM", "device-service@localhost"),
+		SMTPAuthType:   getEnv("SMTP_AUTH_TYPE", "none"),
+		SMTPUsername:   getEnv("SMTP_USERNAME", ""),
+		SMTPPassword:   getEnv("SMTP_PASSWORD", ""),
+		SMTPEncryption: getEnv("SMTP_ENCRYPTION", "none"),
+		// Enrollment Policy
+		AutoApproveFirstDevice: parseBool(getEnv("AUTO_APPROVE_FIRST_DEVICE", "true"), true),
+		ApprovalMethods:        parseApprovalMethods(getEnv("APPROVAL_METHODS", "email,cross_device")),
+		CrossDeviceMinTrust:    parseInt(getEnv("CROSS_DEVICE_MIN_TRUST", "50"), 50),
+		EmailChallengeTTL:      parseInt(getEnv("EMAIL_CHALLENGE_TTL", "30"), 30),
+		AcrValues:              getEnv("ACR_VALUES", ""),
+		// Trust scoring
+		TrustPointsFirstDevice: parseInt(getEnv("TRUST_POINTS_FIRST_DEVICE", "30"), 30),
+		TrustPointsEmail:       parseInt(getEnv("TRUST_POINTS_EMAIL", "20"), 20),
+		TrustPointsAcr:         parseInt(getEnv("TRUST_POINTS_ACR", "25"), 25),
+		TrustPointsCrossDevice: parseInt(getEnv("TRUST_POINTS_CROSS_DEVICE", "30"), 30),
 	}
 }
 
@@ -135,4 +164,26 @@ func parseInt(value string, fallback int) int {
 		return fallback
 	}
 	return i
+}
+
+func parseApprovalMethods(value string) []ApprovalMethod {
+	raw := parseCSV(value)
+	methods := make([]ApprovalMethod, 0, len(raw))
+	for _, m := range raw {
+		switch ApprovalMethod(m) {
+		case ApprovalAcr, ApprovalEmail, ApprovalCrossDevice:
+			methods = append(methods, ApprovalMethod(m))
+		}
+	}
+	return methods
+}
+
+// HasApprovalMethod vérifie si une méthode d'approbation est activée.
+func (c *Config) HasApprovalMethod(method ApprovalMethod) bool {
+	for _, m := range c.ApprovalMethods {
+		if m == method {
+			return true
+		}
+	}
+	return false
 }

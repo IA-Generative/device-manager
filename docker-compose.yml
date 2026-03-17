@@ -23,6 +23,7 @@ services:
       context: .
       target: dev
       dockerfile: device/Dockerfile
+    image: github.com/nonot/device-service:dev
     ports:
       - "8080:8080"
     volumes:
@@ -32,9 +33,9 @@ services:
       PORT: "8080"
       DATABASE_URL: "postgres://device:device@postgres:5432/devicedb?sslmode=disable"
       REDIS_URL: "redis://redis:6379"
-      KEYCLOAK_URL: "http://keycloak:8080"
       KEYCLOAK_PUBLIC_URI: "http://localhost:8081/"
       KEYCLOAK_REALM: "myapp"
+      JWKS_ENDPOINT: "http://keycloak:8080/realms/myapp/protocol/openid-connect/certs"
       ATTESTATION_MODE: "prefer_hardware"
       REATTEST_INTERVAL_HOURS: "24"
       REQUIRE_DEVICE_SIGNATURE: "false"
@@ -43,6 +44,17 @@ services:
       SMTP_HOST: "mailhog"
       SMTP_PORT: "1025"
       SMTP_FROM: "device-service@localhost"
+      # Enrollment Policy
+      AUTO_APPROVE_FIRST_DEVICE: "true"
+      APPROVAL_METHODS: "email,cross_device"     # acr, email, cross_device
+      CROSS_DEVICE_MIN_TRUST: "50"
+      EMAIL_CHALLENGE_TTL: "30"                  # minutes
+      ACR_VALUES: ""                             # ex: "urn:keycloak:acr:silver"
+      # Trust scoring par méthode d'approbation
+      TRUST_POINTS_FIRST_DEVICE: "30"
+      TRUST_POINTS_EMAIL: "20"
+      TRUST_POINTS_ACR: "25"
+      TRUST_POINTS_CROSS_DEVICE: "30"
     depends_on:
       postgres:
         condition: service_healthy

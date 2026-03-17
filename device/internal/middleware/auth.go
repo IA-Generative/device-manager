@@ -58,6 +58,9 @@ func JWTAuth(jwksURL string, logger *zap.Logger) func(http.Handler) http.Handler
 			if email, ok := claims["email"].(string); ok {
 				ctx = context.WithValue(ctx, ctxkeys.Email, email)
 			}
+			if acr, ok := claims["acr"].(string); ok {
+				ctx = context.WithValue(ctx, ctxkeys.Acr, acr)
+			}
 
 			next.ServeHTTP(w, r.WithContext(ctx))
 		})

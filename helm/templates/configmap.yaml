@@ -39,4 +39,16 @@ data:
   SMTP_ENCRYPTION: {{ .Values.app.smtp.encryption | default "none" | quote }}
   SMTP_AUTH_TYPE: {{ .Values.app.smtp.authType | default "none" | quote }}
   SMTP_USERNAME: {{ .Values.app.smtp.username | default "" | quote }}
-  APPROVAL_TIMEOUT_MINUTES: {{ .Values.app.smtp.approvalTimeoutMinutes | toString | quote }}
+
+  # Enrollment policy
+  AUTO_APPROVE_FIRST_DEVICE: {{ .Values.app.enrollment.autoApproveFirstDevice | toString | quote }}
+  APPROVAL_METHODS: {{ .Values.app.enrollment.approvalMethods | quote }}
+  CROSS_DEVICE_MIN_TRUST: {{ .Values.app.enrollment.crossDeviceMinTrust | toString | quote }}
+  EMAIL_CHALLENGE_TTL: {{ .Values.app.enrollment.emailChallengeTTL | toString | quote }}
+  ACR_VALUES: {{ .Values.app.enrollment.acrValues | default "" | quote }}
+
+  # Trust scoring
+  TRUST_POINTS_FIRST_DEVICE: {{ .Values.app.trustPoints.firstDevice | toString | quote }}
+  TRUST_POINTS_EMAIL: {{ .Values.app.trustPoints.email | toString | quote }}
+  TRUST_POINTS_ACR: {{ .Values.app.trustPoints.acr | toString | quote }}
+  TRUST_POINTS_CROSS_DEVICE: {{ .Values.app.trustPoints.crossDevice | toString | quote }}

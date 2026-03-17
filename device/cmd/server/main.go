@@ -55,7 +55,7 @@ func main() {
 	)
 	svc := service.NewDeviceServiceWithConfig(repo, rdb, emailSvc, logger, cfg)
 	attestSvc := service.NewAttestationService(svc, cfg.AttestationMode, logger)
-	riskSvc := service.NewRiskService(svc, cfg.ReattestIntervalHours, logger)
+	riskSvc := service.NewRiskService(svc, cfg, logger)
 
 	probeHandler := handler.NewProbeHandler(pg, rdb, logger)
 	authHandler := handler.NewAuthHandler(cfg, svc)

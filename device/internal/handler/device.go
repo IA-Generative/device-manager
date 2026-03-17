@@ -72,6 +72,10 @@ func (h *DeviceHandler) Register(w http.ResponseWriter, r *http.Request) {
 	if email, ok := r.Context().Value(ctxkeys.Email).(string); ok {
 		registerReq.Email = email
 	}
+	// Extract ACR from JWT context (MFA approval)
+	if acr, ok := r.Context().Value(ctxkeys.Acr).(string); ok {
+		registerReq.Acr = acr
+	}
 
 	// ─── Challenge-then-register : vérifier la preuve de possession ──────────
 	if registerReq.PublicKey != "" && registerReq.Challenge != "" && registerReq.ChallengeSignature != "" {

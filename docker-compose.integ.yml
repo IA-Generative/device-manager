@@ -1,0 +1,14 @@
+services:
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile.dev
+    ports:
+      - "5173:5173"
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules        # garde le node_modules du conteneur
+    env_file:
+      - .env.integ
+    restart: unless-stopped

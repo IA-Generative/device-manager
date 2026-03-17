@@ -129,8 +129,26 @@ app:
     # existingSecret:
     #   name: "my-smtp-secret"
     #   passwordKey: "password"
-    # Minutes before a pending_approval device auto-expires
-    approvalTimeoutMinutes: 30
+
+  # ── Enrollment Policy ──
+  enrollment:
+    # true → premier device auto-actif (Architecture A)
+    autoApproveFirstDevice: true
+    # Méthodes d'approbation (CSV) : acr, email, cross_device
+    approvalMethods: "email,cross_device"
+    # Trust score min pour qu'un device approuve un autre (Architecture C)
+    crossDeviceMinTrust: 50
+    # Durée de validité du code email en minutes (Architecture B)
+    emailChallengeTTL: 30
+    # acr_values Keycloak pour l'approbation MFA (vide = désactivé)
+    acrValues: ""
+
+  # ── Trust scoring par méthode d'approbation (points sur 30) ──
+  trustPoints:
+    firstDevice: 30
+    email: 20
+    acr: 25
+    crossDevice: 30
 
 # ── Redis / Valkey ──────────────────────────────────────────────────────────
 redis:

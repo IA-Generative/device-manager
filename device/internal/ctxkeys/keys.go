@@ -6,4 +6,5 @@ const (
 	UserID   contextKey = "user_id"
 	DeviceID contextKey = "device_id"
 	Email    contextKey = "email"
+	Acr      contextKey = "acr"
 )

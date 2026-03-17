@@ -4,7 +4,6 @@ import (
 	"context"
 	"crypto/rand"
 	"crypto/subtle"
-	"encoding/json"
 	"errors"
 	"fmt"
 
@@ -24,30 +23,92 @@ import (
 )
 
 type DeviceService struct {
-	repo                   *repository.DeviceRepository
-	cache                  *cache.Redis
-	emailSvc               *EmailService
-	logger                 *zap.Logger
-	attestationMode        config.AttestationMode
-	approvalTimeoutMinutes int
+	repo     *repository.DeviceRepository
+	cache    *cache.Redis
+	emailSvc *EmailService
+	logger   *zap.Logger
+	cfg      *config.Config
 }
 
 var ErrHardwareAttestationRequired = errors.New("hardware attestation required")
 
-func NewDeviceService(repo *repository.DeviceRepository, cache *cache.Redis, logger *zap.Logger, attestationMode config.AttestationMode) *DeviceService {
-	return &DeviceService{repo: repo, cache: cache, logger: logger, attestationMode: attestationMode}
+func NewDeviceService(repo *repository.DeviceRepository, cache *cache.Redis, logger *zap.Logger, cfg *config.Config) *DeviceService {
+	return &DeviceService{repo: repo, cache: cache, logger: logger, cfg: cfg}
 }
 
-// NewDeviceServiceWithConfig crée un DeviceService avec la configuration A+B
+// NewDeviceServiceWithConfig crée un DeviceService avec la configuration complète (email, etc.)
 func NewDeviceServiceWithConfig(repo *repository.DeviceRepository, cache *cache.Redis, emailSvc *EmailService, logger *zap.Logger, cfg *config.Config) *DeviceService {
 	return &DeviceService{
-		repo:                   repo,
-		cache:                  cache,
-		emailSvc:               emailSvc,
-		logger:                 logger,
-		attestationMode:        cfg.AttestationMode,
-		approvalTimeoutMinutes: cfg.ApprovalTimeoutMinutes,
+		repo:     repo,
+		cache:    cache,
+		emailSvc: emailSvc,
+		logger:   logger,
+		cfg:      cfg,
 	}
+}
+
+// ─── Enrollment Policy Engine ────────────────────────────────────────────────
+
+// RegistrationDecision contient la décision prise par la politique d'enrollment.
+type RegistrationDecision struct {
+	InitialStatus         model.DeviceStatus
+	ApprovedBy            string // ex: "auto:first_device", "acr:<value>", ""
+	SendEmailChallenge    bool
+	NotifyExistingDevices bool
+}
+
+// resolveRegistration détermine le statut initial et les actions post-enregistrement
+// selon : AutoApproveFirstDevice, ApprovalMethods (acr/email/cross_device), AcrValues.
+func (s *DeviceService) resolveRegistration(ctx context.Context, req model.RegisterRequest) (*RegistrationDecision, error) {
+	cfg := s.cfg
+	hasEmail := req.Email != ""
+
+	// ── 1. Premier device auto-approuvé ? ──────────────────────────────
+	if cfg.AutoApproveFirstDevice {
+		activeCount, err := s.repo.CountActiveByUser(ctx, req.UserID)
+		if err != nil {
+			return nil, fmt.Errorf("failed to count active devices: %w", err)
+		}
+		if activeCount == 0 {
+			s.logger.Info("first device — auto-approved",
+				zap.String("user_id", req.UserID))
+			return &RegistrationDecision{
+				InitialStatus:         model.StatusActive,
+				ApprovedBy:            "auto:first_device",
+				SendEmailChallenge:    false,
+				NotifyExistingDevices: false,
+			}, nil
+		}
+	}
+
+	// ── 2. ACR approval : si activé et que le token satisfait acr_values → actif ─
+	if cfg.HasApprovalMethod(config.ApprovalAcr) && cfg.AcrValues != "" && req.Acr != "" {
+		if req.Acr == cfg.AcrValues {
+			s.logger.Info("device approved via ACR",
+				zap.String("user_id", req.UserID),
+				zap.String("acr", req.Acr))
+			return &RegistrationDecision{
+				InitialStatus:         model.StatusActive,
+				ApprovedBy:            "acr:" + req.Acr,
+				SendEmailChallenge:    false,
+				NotifyExistingDevices: false,
+			}, nil
+		}
+		s.logger.Info("ACR mismatch — falling through to async approval",
+			zap.String("required", cfg.AcrValues),
+			zap.String("got", req.Acr))
+	}
+
+	// ── 3. Aucune approbation synchrone → pending avec méthodes async ──
+	s.logger.Info("device pending approval",
+		zap.String("user_id", req.UserID),
+		zap.Any("approval_methods", cfg.ApprovalMethods))
+
+	return &RegistrationDecision{
+		InitialStatus:         model.StatusPendingApproval,
+		SendEmailChallenge:    hasEmail && cfg.HasApprovalMethod(config.ApprovalEmail),
+		NotifyExistingDevices: cfg.HasApprovalMethod(config.ApprovalCrossDevice),
+	}, nil
 }
 
 func (s *DeviceService) Register(ctx context.Context, req model.RegisterRequest) (*model.Device, error) {
@@ -67,12 +128,10 @@ func (s *DeviceService) Register(ctx context.Context, req model.RegisterRequest)
 	// ─── Politique d'attestation ──────────────────────────────────────────────
 	hasKeys := publicKey != ""
 
-	switch s.attestationMode {
+	switch s.cfg.AttestationMode {
 	case config.AttestationSoftwareOnly:
-		// Software only : on accepte sans clé ou avec clé, mais pas hardware
 		hardwareLevel = "software"
 		providerName = "software"
-		// On garde les clés si le client les envoie (challenge-then-register vérifié en amont)
 
 	case config.AttestationRequireHardware:
 		if !hasKeys {
@@ -83,8 +142,6 @@ func (s *DeviceService) Register(ctx context.Context, req model.RegisterRequest)
 		}
 
 	case config.AttestationPreferHardware:
-		// On accepte tout, clés ou pas.
-		// Si pas de clés, on enregistre en "software" sans attestation.
 		if !hasKeys {
 			hardwareLevel = "software"
 			providerName = "software"
@@ -96,15 +153,16 @@ func (s *DeviceService) Register(ctx context.Context, req model.RegisterRequest)
 		deviceID = uuid.New().String()
 	}
 
-	// si aucun user_id fourni, rejet pour éviter les devices orphelins
 	if req.UserID == "" {
 		return nil, errors.New("user_id is required in token for device registration")
 	}
 
-	// Architecture B : pending_approval + email challenge
-	initialStatus := model.StatusPendingApproval
-	s.logger.Info("additional device registration (Architecture B — email challenge)",
-		zap.String("user_id", req.UserID))
+	// ─── Résolution de la politique d'enrollment ───────────────────────
+	decision, err := s.resolveRegistration(ctx, req)
+	if err != nil {
+		return nil, fmt.Errorf("registration policy resolution failed: %w", err)
+	}
+	initialStatus := decision.InitialStatus
 
 	device := &model.Device{
 		DeviceID:      deviceID,
@@ -112,6 +170,11 @@ func (s *DeviceService) Register(ctx context.Context, req model.RegisterRequest)
 		Status:        initialStatus,
 		HardwareLevel: &hardwareLevel,
 		ProviderName:  &providerName,
+	}
+	if decision.ApprovedBy != "" {
+		device.ApprovedBy = &decision.ApprovedBy
+		now := time.Now()
+		device.ApprovedAt = &now
 	}
 
 	if req.Name != "" {
@@ -139,42 +202,38 @@ func (s *DeviceService) Register(ctx context.Context, req model.RegisterRequest)
 		return nil, err
 	}
 
-	// Si pending_approval : générer un code email et l'envoyer à l'utilisateur
-	if initialStatus == model.StatusPendingApproval {
-		// Pub/Sub pour les devices déjà connectés
+	// ─── Actions post-enregistrement selon la décision de politique ─────────
+	if decision.NotifyExistingDevices {
 		event := `{"type":"pending_device","device_id":"` + device.DeviceID + `","name":"` + stringOrDefault(device.Name, "Nouveau device") + `","message":"Un nouveau device demande à être approuvé"}`
 		if pubErr := s.cache.PublishApprovalEvent(ctx, req.UserID, event); pubErr != nil {
 			s.logger.Warn("failed to publish approval event",
 				zap.String("user_id", req.UserID),
 				zap.Error(pubErr))
 		}
+	}
 
-		// Générer et stocker le code email
-		if req.Email != "" {
-			code, err := generateOTPCode()
-			if err != nil {
-				s.logger.Warn("failed to generate email challenge", zap.Error(err))
-			} else {
-				ttl := time.Duration(s.approvalTimeoutMinutes) * time.Minute
-				if ttl <= 0 {
-					ttl = 30 * time.Minute
-				}
-				if err := s.cache.SetEmailChallenge(ctx, device.DeviceID, code, ttl); err != nil {
-					s.logger.Warn("failed to store email challenge", zap.Error(err))
-				} else if s.emailSvc != nil {
-					if err := s.emailSvc.SendDeviceApprovalCode(req.Email, stringOrDefault(device.Name, "Nouveau device"), code); err != nil {
-						s.logger.Warn("failed to send approval email",
-							zap.String("to", req.Email),
-							zap.Error(err))
-					} else {
-						s.logger.Info("approval email sent",
-							zap.String("to", req.Email),
-							zap.String("device_id", device.DeviceID))
-					}
+	if decision.SendEmailChallenge {
+		code, err := generateOTPCode()
+		if err != nil {
+			s.logger.Warn("failed to generate email challenge", zap.Error(err))
+		} else {
+			ttl := time.Duration(s.cfg.EmailChallengeTTL) * time.Minute
+			if ttl <= 0 {
+				ttl = 30 * time.Minute
+			}
+			if err := s.cache.SetEmailChallenge(ctx, device.DeviceID, code, ttl); err != nil {
+				s.logger.Warn("failed to store email challenge", zap.Error(err))
+			} else if s.emailSvc != nil {
+				if err := s.emailSvc.SendDeviceApprovalCode(req.Email, stringOrDefault(device.Name, "Nouveau device"), code); err != nil {
+					s.logger.Warn("failed to send approval email",
+						zap.String("to", req.Email),
+						zap.Error(err))
+				} else {
+					s.logger.Info("approval email sent",
+						zap.String("to", req.Email),
+						zap.String("device_id", device.DeviceID))
 				}
 			}
-		} else {
-			s.logger.Warn("no email in token — email challenge skipped", zap.String("device_id", device.DeviceID))
 		}
 	}
 
@@ -193,36 +252,23 @@ func (s *DeviceService) Get(ctx context.Context, deviceID string) (*model.Device
 }
 
 func (s *DeviceService) Status(ctx context.Context, deviceID string) (*model.StatusResponse, error) {
-	// 1. Chercher dans le cache Redis
-	if data, err := s.cache.GetDeviceStatus(ctx, deviceID); err == nil {
-		var sr model.StatusResponse
-		if err := json.Unmarshal(data, &sr); err == nil {
-			s.logger.Debug("device status from cache", zap.String("device_id", deviceID))
-			return &sr, nil
-		}
-	}
-
-	// 2. Fallback sur Postgres
 	device, err := s.repo.GetByDeviceID(ctx, deviceID)
 	if err != nil {
 		return nil, err
 	}
+
+	// Trust score calculé en temps réel (jamais lu depuis DB)
+	params := TrustParamsFromConfig(s.cfg)
+	score, _ := model.ComputeTrustScore(device, params)
 
 	sr := &model.StatusResponse{
 		DeviceID:      device.DeviceID,
 		UserID:        device.UserID,
 		Status:        device.Status,
 		HardwareLevel: device.HardwareLevel,
-		TrustScore:    device.TrustScore,
+		TrustScore:    &score,
 		AttestedAt:    device.AttestedAt,
 		ReattestAt:    device.ReattestAt,
-	}
-
-	// 3. Mettre en cache
-	if err := s.cache.SetDeviceStatus(ctx, deviceID, sr); err != nil {
-		s.logger.Warn("failed to cache device status",
-			zap.String("device_id", deviceID),
-			zap.Error(err))
 	}
 
 	return sr, nil
@@ -374,6 +420,13 @@ func (s *DeviceService) ApproveDevice(ctx context.Context, deviceID, approverDev
 	}
 	if approver.Status != model.StatusActive {
 		return errors.New("approver device is not active")
+	}
+
+	// Vérifier que l'approbateur a un trust score suffisant (temps réel)
+	params := TrustParamsFromConfig(s.cfg)
+	approverScore, _ := model.ComputeTrustScore(approver, params)
+	if approverScore < s.cfg.CrossDeviceMinTrust {
+		return fmt.Errorf("approver trust score too low (%d < %d)", approverScore, s.cfg.CrossDeviceMinTrust)
 	}
 
 	if err := s.repo.Approve(ctx, deviceID, approverDeviceID); err != nil {

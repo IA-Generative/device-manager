@@ -247,7 +247,9 @@ func (r *DeviceRepository) CreateWithKey(ctx context.Context, d *model.Device) e
             hardware_level,
             provider_name,
             attested_at,
-						user_id
+						user_id,
+						approved_by,
+						approved_at
         ) VALUES (
             :device_id,
             :name,
@@ -259,7 +261,9 @@ func (r *DeviceRepository) CreateWithKey(ctx context.Context, d *model.Device) e
             :hardware_level,
             :provider_name,
             :attested_at,
-						:user_id
+						:user_id,
+						:approved_by,
+						:approved_at
         )
         RETURNING id, created_at`
 

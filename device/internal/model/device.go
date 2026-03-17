@@ -64,6 +64,8 @@ type RegisterRequest struct {
 	ChallengeSignature string `json:"challenge_signature,omitempty"`
 	// Email (extracted from JWT, not from request body)
 	Email string `json:"-"`
+	// ACR level from JWT (e.g. "urn:keycloak:acr:silver")
+	Acr string `json:"-"`
 }
 
 type StatusResponse struct {
