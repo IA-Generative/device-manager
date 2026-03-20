@@ -76,6 +76,7 @@ type StatusResponse struct {
 	TrustScore    *int         `json:"trust_score"`
 	AttestedAt    *time.Time   `json:"attested_at,omitempty"`
 	ReattestAt    *time.Time   `json:"reattest_at,omitempty"`
+	PublicKey     *string      `json:"public_key,omitempty"`
 }
 
 type RevokeRequest struct {

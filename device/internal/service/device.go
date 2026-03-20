@@ -269,6 +269,7 @@ func (s *DeviceService) Status(ctx context.Context, deviceID string) (*model.Sta
 		TrustScore:    &score,
 		AttestedAt:    device.AttestedAt,
 		ReattestAt:    device.ReattestAt,
+		PublicKey:     device.PublicKey,
 	}
 
 	return sr, nil
