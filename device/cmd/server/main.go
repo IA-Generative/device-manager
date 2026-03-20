@@ -80,12 +80,12 @@ func main() {
 	r.Get("/healthz", probeHandler.Liveness)
 	r.Get("/readyz", probeHandler.Readiness)
 	r.Get("/discover", authHandler.Discover)
-	r.Get("/devices/{device_id}/status", deviceHandler.Status)
-
+	
 	// Device endpoints (JWT requis)
 	r.Group(func(r chi.Router) {
 		r.Use(authmw.JWTAuth(cfg.JWKSEndpoint, logger))
-
+		
+		r.Get("/devices/{device_id}/status", deviceHandler.Status)
 		r.Post("/devices/register", deviceHandler.Register)
 		r.Post("/devices/register/challenge", attestHandler.RegisterChallenge)
 		r.Get("/devices/{device_id}", deviceHandler.Get)
