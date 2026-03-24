@@ -1,7 +1,7 @@
 <template>
   <div>
     <h1>Device Flow</h1>
-    <div class="two-col">
+    <div class="grid">
 
       <!-- ── COLONNE GAUCHE : Authentification ──────────────────────────── -->
       <div class="panel">
@@ -25,7 +25,8 @@
         </div>
 
         <StatusBanner v-if="authStatusMsg" :type="authStatusType" :message="authStatusMsg" />
-
+      </div>
+      <div class="panel">
         <div v-if="auth.user" class="jwt-panel">
           <div class="jwt-title">JWT Payload</div>
           <pre class="jwt-pre">{{ JSON.stringify(auth.user, null, 2) }}</pre>
@@ -44,6 +45,9 @@
           <button :disabled="!auth.isAuthenticated || !auth.deviceId || busy" @click="fakeCall">
             Fake API Call
           </button>
+          <ApiCallButton :log-fn="log"/>
+          <StatusButton :log-fn="log"/>
+          <VerifyButton :log-fn="log" />
           <button @click="reset">Reset</button>
         </div>
 
@@ -55,6 +59,8 @@
           <code>{{ auth.deviceId }}</code>
         </div>
 
+      </div>
+      <div class="panel">
         <DebugPanel :data="debugData" />
         <LogOutput :content="logContent" />
       </div>
@@ -75,6 +81,9 @@ import { useSettingsStore } from '@/stores/settings.js'
 import { useOAuth } from '@/composables/useOAuth.js'
 import { useDeviceCrypto } from '@/composables/useDeviceCrypto.js'
 import { useDeviceApi } from '@/composables/useDeviceApi.js'
+import ApiCallButton from '@/components/ApiCallButton.vue'
+import StatusButton from '@/components/StatusButton.vue'
+import VerifyButton from '@/components/VerifyButton.vue'
 
 const auth = useAuthStore()
 const settings = useSettingsStore()
@@ -226,15 +235,15 @@ h2 {
   padding-bottom: 8px;
 }
 
-.two-col {
+.grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 16px;
-  align-items: start;
+  /* align-items: start; */
 }
 
 @media (max-width: 700px) {
-  .two-col {
+  .grid {
     grid-template-columns: 1fr;
   }
 }

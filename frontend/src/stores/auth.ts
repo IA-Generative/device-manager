@@ -30,7 +30,6 @@ export const useAuthStore = defineStore('auth', () => {
 
   function clear() {
     accessToken.value = ''
-    deviceId.value = ''
     sessionStorage.removeItem(ACCESS_TOKEN_KEY)
     localStorage.removeItem(DEVICE_ID_KEY)
   }

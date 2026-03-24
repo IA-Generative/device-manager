@@ -93,15 +93,33 @@ export async function signRegisterChallenge(challenge) {
 }
 
 // ── Device-bound session headers ───────────────────────────────────────────────
-export async function makeDeviceHeaders(deviceId) {
-  if (!deviceId) return {}
+export async function makeSignature() {
   try {
     const kp = await loadKeyPair()
     if (!kp?.privateKey) return {}
     const nonce = crypto.randomUUID()
     const timestamp = new Date().toISOString()
     const signature = await signPayload(kp.privateKey, nonce + '|' + timestamp)
-    return { 'X-Device-ID': deviceId, 'X-Device-Nonce': nonce, 'X-Device-Timestamp': timestamp, 'X-Device-Signature': signature }
+    return { 
+      nonce,
+      timestamp,
+      signature,
+    }
+  } catch (_) {
+    return {}
+  }
+}
+
+export async function makeDeviceHeaders(deviceId) {
+  if (!deviceId) return {}
+  try {
+    const kp = await makeSignature()
+    return { 
+      'X-Device-ID': deviceId,
+      'X-Device-Nonce': kp.nonce,
+      'X-Device-Timestamp': kp.timestamp,
+      'X-Device-Signature': kp.signature,
+    }
   } catch (_) {
     return {}
   }

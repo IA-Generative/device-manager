@@ -1,4 +1,5 @@
 import { apiFetch, DEVICE_SERVICE_BASE_URL } from '@/lib/api'
+import { makeSignature } from '@/lib/crypto'
 import { useAuthStore } from '@/stores/auth'
 
 export function useDeviceApi() {
@@ -16,7 +17,7 @@ export function useDeviceApi() {
     })
 
   const getStatus = (deviceId) =>
-    apiFetch(`${DEVICE_SERVICE_BASE_URL}/devices/${encodeURIComponent(deviceId)}/status`)
+    apiFetch(`${DEVICE_SERVICE_BASE_URL}/devices/${encodeURIComponent(deviceId)}/status`, { headers: authHeader() })
 
   const listMine = () =>
     apiFetch(`${DEVICE_SERVICE_BASE_URL}/me/devices`, { headers: authHeader() })
@@ -51,6 +52,18 @@ export function useDeviceApi() {
       body: JSON.stringify({ code })
     })
 
+  const verifyDevice = async (deviceId) => {
+    const signInHeaders = await makeSignature()
+    return apiFetch(`${DEVICE_SERVICE_BASE_URL}/devices/${encodeURIComponent(deviceId)}/verify`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...authHeader() },
+      body: JSON.stringify({ 
+        device_id: deviceId,
+        ...signInHeaders,
+      })
+    })
+  }
+
   const reattest = (deviceId, payload) =>
     apiFetch(`${DEVICE_SERVICE_BASE_URL}/devices/${encodeURIComponent(deviceId)}/reattest`, {
       method: 'POST',
@@ -58,5 +71,5 @@ export function useDeviceApi() {
       body: JSON.stringify(payload)
     })
 
-  return { register, getStatus, listMine, listPending, getDeviceTrust, revoke, approve, reject, verifyEmailCode, reattest }
+  return { register, getStatus, listMine, listPending, getDeviceTrust, revoke, approve, reject, verifyEmailCode, verifyDevice, reattest }
 }
