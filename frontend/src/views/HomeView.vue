@@ -48,6 +48,7 @@
           <ApiCallButton :log-fn="log"/>
           <StatusButton :log-fn="log"/>
           <VerifyButton :log-fn="log" />
+          <HeadersButton @data="(data) => debugData = data" />
           <button @click="reset">Reset</button>
         </div>
 
@@ -84,6 +85,7 @@ import { useDeviceApi } from '@/composables/useDeviceApi.js'
 import ApiCallButton from '@/components/ApiCallButton.vue'
 import StatusButton from '@/components/StatusButton.vue'
 import VerifyButton from '@/components/VerifyButton.vue'
+import HeadersButton from '@/components/HeadersButton.vue'
 
 const auth = useAuthStore()
 const settings = useSettingsStore()

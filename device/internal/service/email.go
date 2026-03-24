@@ -1,8 +1,10 @@
 package service
 
 import (
+	"bytes"
 	"crypto/tls"
 	"fmt"
+	"html/template"
 	"net/smtp"
 )
 
@@ -64,22 +66,29 @@ func buildSMTPAuth(authType SMTPAuthType, username, password, host string) smtp.
 
 // SendDeviceApprovalCode sends the one-time approval code to the user's email.
 func (e *EmailService) SendDeviceApprovalCode(to, deviceName, code string) error {
+	t, err := template.ParseFiles("./templates/ApprovalCode.html")
+	if err != nil {
+		return fmt.Errorf("parse email template: %w", err)
+	}
+
+	var body bytes.Buffer
 	subject := "Validation de votre nouveau device"
-	body := fmt.Sprintf(
-		"Bonjour,\r\n\r\n"+
-			"Un nouveau device \"%s\" demande à être enregistré sur votre compte.\r\n\r\n"+
-			"Votre code de validation : %s\r\n\r\n"+
-			"Ce code expire dans 30 minutes.\r\n\r\n"+
-			"Si vous n'êtes pas à l'origine de cette demande, ignorez ce message.\r\n",
-		deviceName, code,
-	)
+	if err := t.Execute(&body, struct {
+		DeviceName string
+		Code       string
+	}{
+		DeviceName: deviceName,
+		Code:       code,
+	}); err != nil {
+		return fmt.Errorf("execute email template: %w", err)
+	}
 	msg := []byte(
 		"To: " + to + "\r\n" +
-			"From: " + e.from + "\r\n" +
-			"Subject: " + subject + "\r\n" +
-			"Content-Type: text/plain; charset=utf-8\r\n" +
-			"\r\n" +
-			body,
+		"From: " + e.from + "\r\n" +
+		"Subject: " + subject + "\r\n" +
+		"Content-Type: text/html; charset=utf-8\r\n" +
+		"\r\n" +
+		body.String(),
 	)
 	return e.sendMail([]string{to}, msg)
 }

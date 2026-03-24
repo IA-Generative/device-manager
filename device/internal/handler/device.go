@@ -215,6 +215,11 @@ func (h *DeviceHandler) Get(w http.ResponseWriter, r *http.Request) {
 // GET /devices/{device_id}/status
 func (h *DeviceHandler) Status(w http.ResponseWriter, r *http.Request) {
 	deviceID := chi.URLParam(r, "device_id")
+	userID, ok := r.Context().Value(ctxkeys.UserID).(string)
+	if !ok || userID == "" {
+		jsonError(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
 
 	sr, err := h.svc.Status(r.Context(), deviceID)
 	if err != nil {
@@ -225,7 +230,11 @@ func (h *DeviceHandler) Status(w http.ResponseWriter, r *http.Request) {
 		jsonError(w, "internal error", http.StatusInternalServerError)
 		return
 	}
-
+	if sr.UserID != userID {
+		jsonError(w, "device not found", http.StatusNotFound)
+		return
+	}
+	
 	jsonResponse(w, sr, http.StatusOK)
 }
 

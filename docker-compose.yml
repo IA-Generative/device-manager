@@ -110,7 +110,6 @@ services:
       POSTGRES_DB: devicedb
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      - ./migrations/001_init.sql:/docker-entrypoint-initdb.d/001_init.sql
     ports:
       - "5432:5432"
     healthcheck:

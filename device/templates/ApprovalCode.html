@@ -1,0 +1,36 @@
+<html>
+<head>
+    <title>Approval Code</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #f4f4f4;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+        }
+        .container {
+            background-color: #fff;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+            text-align: center;
+        }
+        .code {
+            font-size: 24px;
+            font-weight: bold;
+            color: #333;
+            margin-top: 10px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Device Approval Code</h1>
+        <p>A new device "{{ .DeviceName }}" is requesting to be registered on your account.</p>
+        <p>Please enter the following code on your device to complete the registration process:</p>
+        <div class="code">{{ .Code }}</div>
+        <p>This code will expire in 30 minutes.</p>
+    </div>
+</html>
