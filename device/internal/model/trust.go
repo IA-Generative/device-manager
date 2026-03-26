@@ -1,6 +1,11 @@
 package model
 
-import "time"
+import (
+	"fmt"
+	"time"
+
+	"go.uber.org/zap"
+)
 
 // TrustParams contient les paramètres configurables du calcul de trust score.
 // Passé en valeur pour garder le calcul pur (pas de dépendance config/service).
@@ -17,12 +22,13 @@ type TrustParams struct {
 // Le score est toujours recalculé en temps réel — la valeur en DB n'est qu'un cache.
 func ComputeTrustScore(device *Device, params TrustParams) (int, TrustBreakdown) {
 	bd := computeBreakdown(device, params)
+	fmt.Sprintf("breakdown", zap.Any("breakdown", bd))
 	total := bd.ApprovalMethod +
-		bd.HardwarePoints +
 		bd.AttestationAge +
 		bd.ReattestCount +
 		bd.ActivityPoints +
-		bd.StatusPoints
+		bd.StatusPoints +
+		bd.SignaturePoints
 
 	if total < 0 {
 		total = 0
@@ -51,20 +57,11 @@ func computeBreakdown(device *Device, params TrustParams) TrustBreakdown {
 		}
 	}
 
-	// ── 2. Hardware level (0-25 points) ─────────────────────────
-	if device.HardwareLevel != nil {
-		switch *device.HardwareLevel {
-		case "tee", "secure_enclave":
-			bd.HardwarePoints = 25
-		case "software":
-			if device.PublicKey != nil && *device.PublicKey != "" {
-				bd.HardwarePoints = 15
-			} else {
-				bd.HardwarePoints = 5
-			}
-		default:
-			bd.HardwarePoints = 5
-		}
+	// ── 2. Signature level (0-25 points) ─────────────────────────
+	if device.PublicKey != nil && *device.PublicKey != "" {
+		bd.SignaturePoints = 25 // Points pour la présence d'une clé publique (preuve de possession)
+	} else {
+		bd.SignaturePoints = 0
 	}
 
 	// ── 3. Attestation freshness (−10 to +15 points) ────────────

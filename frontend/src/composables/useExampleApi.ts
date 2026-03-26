@@ -1,13 +1,15 @@
 import { apiFetch, EXAMPLE_API_URL } from '@/lib/example-api'
 import { useAuthStore } from '@/stores/auth'
 import { useDeviceCrypto } from './useDeviceCrypto'
+import { useDeviceStore } from '@/stores/device'
 
 export function useExampleApi() {
   const auth = useAuthStore()
+  const device = useDeviceStore()
   const deviceCrypto = useDeviceCrypto()
 
   async function authHeader() {
-    const headers = await deviceCrypto.makeDeviceHeaders(auth.deviceId)
+    const headers = await deviceCrypto.makeDeviceHeaders(device.deviceId)
     const headersWithAuth = { 
       'Authorization': `Bearer ${auth.accessToken}`,
       ...headers,

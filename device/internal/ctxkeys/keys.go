@@ -3,8 +3,11 @@ package ctxkeys
 type contextKey string
 
 const (
-	UserID   contextKey = "user_id"
-	DeviceID contextKey = "device_id"
-	Email    contextKey = "email"
-	Acr      contextKey = "acr"
+	UserID contextKey = "user_id"
+	DeviceID        contextKey = "device_id"
+	DeviceNonce     contextKey = "device_nonce"
+	DeviceTimestamp contextKey = "device_timestamp"
+	DeviceSignature contextKey = "device_signature"
+	Email           contextKey = "email"
+	Acr             contextKey = "acr"
 )

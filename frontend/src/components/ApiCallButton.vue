@@ -1,26 +1,35 @@
 <template>
-
-  <button :disabled="!api.enabled" @click="call">
-    True API Call
-  </button>
-  <button :disabled="!api.enabled" @click="callHead">
-    True HEAD Call
-  </button>
+  <div class="button-row">
+    <div>
+      External API
+    </div>
+    <div>
+      <button :disabled="!exampleApi.enabled || !device.deviceId" @click="call">
+        GET
+      </button>
+      <button :disabled="!exampleApi.enabled || !device.deviceId" @click="callHead">
+        HEAD
+      </button>
+    </div>
+  </div>
 </template>
 
 <script setup lang="ts">
 import { useExampleApi } from '@/composables/useExampleApi';
+import { useDeviceStore } from '@/stores/device';
 
-const props = defineProps<{
-  logFn: (label: string, data: unknown) => void
+const device = useDeviceStore();
+
+const emits = defineEmits<{
+  data: [data: any]
 }>()
 
-const api = useExampleApi()
+const exampleApi = useExampleApi()
 
 async function call() {
   try {
-    const response = await api.call()
-    props.logFn('API CALL response headers', response)
+    const response = await exampleApi.call()
+    emits('data', await response.text())
   } catch (err) {
     console.error('API Call Error:', err)
   }
@@ -28,8 +37,8 @@ async function call() {
 
 async function callHead() {
   try {
-    const response = await api.callHead()
-    props.logFn('API HEAD CALL response headers', response)
+    const response = await exampleApi.callHead()
+    emits('data', await response.text())
   } catch (err) {
     console.error('API HEAD Call Error:', err)
   }

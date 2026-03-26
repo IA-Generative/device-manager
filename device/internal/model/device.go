@@ -20,11 +20,10 @@ type Device struct {
 	Platform  *string      `db:"platform"        json:"platform,omitempty"`
 	Status    DeviceStatus `db:"status"          json:"status"`
 	// Attestation
-	PublicKey     *string    `db:"public_key"      json:"public_key,omitempty"`
-	KeyAlgorithm  *string    `db:"key_algorithm"   json:"key_algorithm,omitempty"`
-	HardwareLevel *string    `db:"hardware_level"  json:"hardware_level"`
-	ProviderName  *string    `db:"provider_name"   json:"provider_name,omitempty"`
-	AttestedAt    *time.Time `db:"attested_at"     json:"attested_at,omitempty"`
+	PublicKey    *string    `db:"public_key"      json:"public_key,omitempty"`
+	KeyAlgorithm *string    `db:"key_algorithm"   json:"key_algorithm,omitempty"`
+	ProviderName *string    `db:"provider_name"   json:"provider_name,omitempty"`
+	AttestedAt   *time.Time `db:"attested_at"     json:"attested_at,omitempty"`
 	// Challenge
 	LastChallenge *string    `db:"last_challenge"  json:"-"`
 	ChallengeExp  *time.Time `db:"challenge_exp"   json:"-"`
@@ -43,22 +42,20 @@ type Device struct {
 }
 
 type AttestationInfo struct {
-	PublicKeyPEM  string
-	KeyAlgorithm  string
-	HardwareLevel string
-	ProviderName  string
+	PublicKeyPEM string
+	KeyAlgorithm string
+	ProviderName string
 }
 
 type RegisterRequest struct {
-	UserID        string `json:"user_id"`
-	DeviceID      string `json:"device_id"`
-	Name          string `json:"name"`
-	UserAgent     string `json:"user_agent"`
-	Platform      string `json:"platform"`
-	PublicKey     string `json:"public_key"`
-	KeyAlgorithm  string `json:"key_algorithm"`
-	HardwareLevel string `json:"hardware_level"`
-	ProviderName  string `json:"provider_name"`
+	UserID       string `json:"user_id"`
+	DeviceID     string `json:"device_id"`
+	Name         string `json:"name"`
+	UserAgent    string `json:"user_agent"`
+	Platform     string `json:"platform"`
+	PublicKey    string `json:"public_key"`
+	KeyAlgorithm string `json:"key_algorithm"`
+	ProviderName string `json:"provider_name"`
 	// Challenge-then-register (FIDO2-style atomic ceremony)
 	Challenge          string `json:"challenge,omitempty"`
 	ChallengeSignature string `json:"challenge_signature,omitempty"`
@@ -69,14 +66,29 @@ type RegisterRequest struct {
 }
 
 type StatusResponse struct {
-	DeviceID      string       `json:"device_id"`
-	UserID        string       `json:"user_id"`
-	Status        DeviceStatus `json:"status"`
-	HardwareLevel *string      `json:"hardware_level"`
-	TrustScore    *int         `json:"trust_score"`
-	AttestedAt    *time.Time   `json:"attested_at,omitempty"`
-	ReattestAt    *time.Time   `json:"reattest_at,omitempty"`
-	PublicKey     *string      `json:"public_key,omitempty"`
+	DeviceID   string       `json:"device_id"`
+	UserID     string       `json:"user_id"`
+	Status     DeviceStatus `json:"status"`
+	TrustScore *int         `json:"trust_score"`
+	AttestedAt *time.Time   `json:"attested_at,omitempty"`
+	ReattestAt *time.Time   `json:"reattest_at,omitempty"`
+	Signed     bool        `json:"signed,omitempty"`
+}
+
+type VerifyResponse struct {
+	Verified   bool   `json:"verified"`
+	DeviceID   string `json:"device_id"`
+	UserID     string `json:"user_id"`
+	TrustScore *int   `json:"trust_score"`
+	Message    string `json:"message,omitempty"`
+	Code       int
+}
+
+type VerifySignatureResponse struct {
+	Verified bool   `json:"verified"`
+	DeviceID string `json:"device_id"`
+	UserID   string `json:"user_id"`
+	Message  string `json:"message,omitempty"`
 }
 
 type RevokeRequest struct {
@@ -96,20 +108,19 @@ type ChallengeResponse struct {
 
 type VerifyChallengeRequest struct {
 	DeviceID  string `json:"device_id"`
-	Challenge string `json:"challenge"`
 	Signature string `json:"signature"` // base64 ECDSA signature of challenge
 	Timestamp string `json:"timestamp"` // RFC3339
 	Nonce     string `json:"nonce"`
 }
 
 type ReattestRequest struct {
-	DeviceID      string `json:"device_id"`
-	Signature     string `json:"signature"` // base64 sign(nonce|timestamp)
-	Timestamp     string `json:"timestamp"` // RFC3339
-	Nonce         string `json:"nonce"`
-	PublicKey     string `json:"public_key"` // PEM — peut être la même ou une nouvelle
-	KeyAlgorithm  string `json:"key_algorithm"`
-	HardwareLevel string `json:"hardware_level"`
+	DeviceID     string `json:"device_id"`
+	Signature    string `json:"signature"` // base64 sign(nonce|timestamp)
+	Timestamp    string `json:"timestamp"` // RFC3339
+	Nonce        string `json:"nonce"`
+	PublicKey    string `json:"public_key"` // PEM — peut être la même ou une nouvelle
+	KeyAlgorithm string `json:"key_algorithm"`
+	// HardwareLevel string `json:"hardware_level"`
 	ProviderName  string `json:"provider_name"`
 	HardwareProof string `json:"hardware_proof,omitempty"` // base64 TPM quote / enclave proof
 }
@@ -117,19 +128,18 @@ type ReattestRequest struct {
 // ─── Risk / Trust Score ──────────────────────────────────────────────────────
 
 type TrustScoreResponse struct {
-	DeviceID      string         `json:"device_id"`
-	TrustScore    int            `json:"trust_score"`
-	HardwareLevel string         `json:"hardware_level"`
-	Breakdown     TrustBreakdown `json:"breakdown"`
+	DeviceID   string         `json:"device_id"`
+	TrustScore int            `json:"trust_score"`
+	Breakdown  TrustBreakdown `json:"breakdown"`
 }
 
 type TrustBreakdown struct {
-	ApprovalMethod int `json:"approval_method_points"`
-	HardwarePoints int `json:"hardware_points"`
-	AttestationAge int `json:"attestation_age_points"`
-	ReattestCount  int `json:"reattest_count_points"`
-	ActivityPoints int `json:"activity_points"`
-	StatusPoints   int `json:"status_points"`
+	ApprovalMethod  int `json:"approval_method_points"`
+	SignaturePoints int `json:"signature_points"`
+	AttestationAge  int `json:"attestation_age_points"`
+	ReattestCount   int `json:"reattest_count_points"`
+	ActivityPoints  int `json:"activity_points"`
+	StatusPoints    int `json:"status_points"`
 }
 
 // ─── Device-Bound Session ────────────────────────────────────────────────────

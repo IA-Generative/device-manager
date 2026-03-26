@@ -11,7 +11,7 @@ import AppNav from '@/components/AppNav.vue'
 
 <style>
 main {
-  max-width: 900px;
+  max-width: 1080px;
   margin: 24px auto;
   padding: 0 16px;
 }

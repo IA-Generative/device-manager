@@ -113,40 +113,9 @@ func (s *DeviceService) resolveRegistration(ctx context.Context, req model.Regis
 
 func (s *DeviceService) Register(ctx context.Context, req model.RegisterRequest) (*model.Device, error) {
 	now := time.Now()
-	hardwareLevel := req.HardwareLevel
 	providerName := req.ProviderName
 	publicKey := req.PublicKey
 	keyAlgorithm := req.KeyAlgorithm
-
-	if hardwareLevel == "" {
-		hardwareLevel = "software"
-	}
-	if providerName == "" {
-		providerName = "software"
-	}
-
-	// ─── Politique d'attestation ──────────────────────────────────────────────
-	hasKeys := publicKey != ""
-
-	switch s.cfg.AttestationMode {
-	case config.AttestationSoftwareOnly:
-		hardwareLevel = "software"
-		providerName = "software"
-
-	case config.AttestationRequireHardware:
-		if !hasKeys {
-			return nil, ErrHardwareAttestationRequired
-		}
-		if hardwareLevel != "tee" && hardwareLevel != "secure_enclave" {
-			return nil, ErrHardwareAttestationRequired
-		}
-
-	case config.AttestationPreferHardware:
-		if !hasKeys {
-			hardwareLevel = "software"
-			providerName = "software"
-		}
-	}
 
 	deviceID := req.DeviceID
 	if deviceID == "" {
@@ -157,7 +126,7 @@ func (s *DeviceService) Register(ctx context.Context, req model.RegisterRequest)
 		return nil, errors.New("user_id is required in token for device registration")
 	}
 
-	// ─── Résolution de la politique d'enrollment ───────────────────────
+	// ─── Résolution de la politique d'enrollment ───────────────────────────────
 	decision, err := s.resolveRegistration(ctx, req)
 	if err != nil {
 		return nil, fmt.Errorf("registration policy resolution failed: %w", err)
@@ -165,11 +134,10 @@ func (s *DeviceService) Register(ctx context.Context, req model.RegisterRequest)
 	initialStatus := decision.InitialStatus
 
 	device := &model.Device{
-		DeviceID:      deviceID,
-		UserID:        req.UserID,
-		Status:        initialStatus,
-		HardwareLevel: &hardwareLevel,
-		ProviderName:  &providerName,
+		DeviceID:     deviceID,
+		UserID:       req.UserID,
+		Status:       initialStatus,
+		ProviderName: &providerName,
 	}
 	if decision.ApprovedBy != "" {
 		device.ApprovedBy = &decision.ApprovedBy
@@ -240,10 +208,8 @@ func (s *DeviceService) Register(ctx context.Context, req model.RegisterRequest)
 	s.logger.Info("device registered",
 		zap.String("device_id", device.DeviceID),
 		zap.String("status", string(initialStatus)),
-		zap.String("hardware_level", hardwareLevel),
 		zap.String("provider_name", providerName),
 	)
-	// s.Bind(ctx, device.DeviceID, req.UserID)
 	return device, nil
 }
 
@@ -261,15 +227,15 @@ func (s *DeviceService) Status(ctx context.Context, deviceID string) (*model.Sta
 	params := TrustParamsFromConfig(s.cfg)
 	score, _ := model.ComputeTrustScore(device, params)
 
+	signed := device.PublicKey != nil && *device.PublicKey != ""
 	sr := &model.StatusResponse{
-		DeviceID:      device.DeviceID,
-		UserID:        device.UserID,
-		Status:        device.Status,
-		HardwareLevel: device.HardwareLevel,
-		TrustScore:    &score,
-		AttestedAt:    device.AttestedAt,
-		ReattestAt:    device.ReattestAt,
-		PublicKey:     device.PublicKey,
+		DeviceID:   device.DeviceID,
+		UserID:     device.UserID,
+		Status:     device.Status,
+		TrustScore: &score,
+		AttestedAt: device.AttestedAt,
+		ReattestAt: device.ReattestAt,
+		Signed:     signed,
 	}
 
 	return sr, nil
@@ -360,11 +326,10 @@ func (s *DeviceService) RegisterWithKey(
 		DeviceID: uuid.New().String(),
 		Status:   model.StatusActive,
 		// Attestation
-		PublicKey:     &attestInfo.PublicKeyPEM,
-		KeyAlgorithm:  &attestInfo.KeyAlgorithm,
-		HardwareLevel: &attestInfo.HardwareLevel,
-		ProviderName:  &attestInfo.ProviderName,
-		AttestedAt:    &now,
+		PublicKey:    &attestInfo.PublicKeyPEM,
+		KeyAlgorithm: &attestInfo.KeyAlgorithm,
+		ProviderName: &attestInfo.ProviderName,
+		AttestedAt:   &now,
 	}
 
 	if baseReq.Name != "" {
@@ -379,7 +344,6 @@ func (s *DeviceService) RegisterWithKey(
 
 	if err := s.repo.CreateWithKey(ctx, device); err != nil {
 		s.logger.Error("failed to create device with key",
-			zap.String("hardware_level", attestInfo.HardwareLevel),
 			zap.Error(err),
 		)
 		return nil, err
@@ -387,7 +351,6 @@ func (s *DeviceService) RegisterWithKey(
 
 	s.logger.Info("device registered with attestation",
 		zap.String("device_id", device.DeviceID),
-		zap.String("hardware_level", attestInfo.HardwareLevel),
 		zap.String("provider", attestInfo.ProviderName),
 	)
 

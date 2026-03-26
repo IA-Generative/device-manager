@@ -164,18 +164,17 @@ func (r *DeviceRepository) Suspend(ctx context.Context, deviceID, reason string)
 }
 
 // UpgradeKey met à jour la clé publique et le hardware_level d'un device
-func (r *DeviceRepository) UpgradeKey(ctx context.Context, deviceID, publicKey, keyAlgorithm, hardwareLevel, providerName string) error {
+func (r *DeviceRepository) UpgradeKey(ctx context.Context, deviceID, publicKey, keyAlgorithm, providerName string) error {
 	result, err := r.db.ExecContext(ctx, `
-		UPDATE devices
-		SET public_key     = $1,
-		    key_algorithm  = $2,
-		    hardware_level = $3,
-		    provider_name  = $4,
-		    attested_at    = NOW(),
-		    last_seen      = NOW()
-		WHERE device_id = $5
-		  AND status = 'active'`,
-		publicKey, keyAlgorithm, hardwareLevel, providerName, deviceID)
+	   UPDATE devices
+	   SET public_key     = $1,
+		   key_algorithm  = $2,
+		   provider_name  = $3,
+		   attested_at    = NOW(),
+		   last_seen      = NOW()
+	   WHERE device_id = $4
+		 AND status = 'active'`,
+		publicKey, keyAlgorithm, providerName, deviceID)
 	if err != nil {
 		return err
 	}
@@ -236,36 +235,34 @@ func (r *DeviceRepository) GetChallenge(ctx context.Context, deviceID string) (s
 // CreateWithKey insère un device avec ses informations d'attestation cryptographique
 func (r *DeviceRepository) CreateWithKey(ctx context.Context, d *model.Device) error {
 	query := `
-        INSERT INTO devices (
-            device_id,
-            name,
-            user_agent,
-            platform,
-            status,
-            public_key,
-            key_algorithm,
-            hardware_level,
-            provider_name,
-            attested_at,
-						user_id,
-						approved_by,
-						approved_at
-        ) VALUES (
-            :device_id,
-            :name,
-            :user_agent,
-            :platform,
-            :status,
-            :public_key,
-            :key_algorithm,
-            :hardware_level,
-            :provider_name,
-            :attested_at,
-						:user_id,
-						:approved_by,
-						:approved_at
-        )
-        RETURNING id, created_at`
+		INSERT INTO devices (
+			device_id,
+			name,
+			user_agent,
+			platform,
+			status,
+			public_key,
+			key_algorithm,
+			provider_name,
+			attested_at,
+			user_id,
+			approved_by,
+			approved_at
+		) VALUES (
+			:device_id,
+			:name,
+			:user_agent,
+			:platform,
+			:status,
+			:public_key,
+			:key_algorithm,
+			:provider_name,
+			:attested_at,
+			:user_id,
+			:approved_by,
+			:approved_at
+		)
+		RETURNING id, created_at`
 
 	rows, err := r.db.NamedQueryContext(ctx, query, d)
 	if err != nil {

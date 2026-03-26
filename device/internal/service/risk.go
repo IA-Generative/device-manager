@@ -61,15 +61,9 @@ func (s *RiskService) ComputeTrustScore(ctx context.Context, deviceID string) (*
 			zap.Error(err))
 	}
 
-	hwLevel := "unknown"
-	if device.HardwareLevel != nil {
-		hwLevel = *device.HardwareLevel
-	}
-
 	return &model.TrustScoreResponse{
-		DeviceID:      deviceID,
-		TrustScore:    total,
-		HardwareLevel: hwLevel,
-		Breakdown:     breakdown,
+		DeviceID:   deviceID,
+		TrustScore: total,
+		Breakdown:  breakdown,
 	}, nil
 }

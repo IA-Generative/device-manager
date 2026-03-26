@@ -7,7 +7,7 @@ const STORE_NAME = 'keys'
 const KEY_ID = 'device-ecdsa-key'
 
 // ── IndexedDB helpers ──────────────────────────────────────────────────────────
-function openDB() {
+function openDB(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
     const req = indexedDB.open(DB_NAME, 1)
     req.onupgradeneeded = () => req.result.createObjectStore(STORE_NAME)
@@ -16,7 +16,7 @@ function openDB() {
   })
 }
 
-async function storeKeyPair(keyPair) {
+async function storeKeyPair(keyPair: CryptoKeyPair): Promise<void> {
   const db = await openDB()
   return new Promise((resolve, reject) => {
     const tx = db.transaction(STORE_NAME, 'readwrite')
@@ -26,7 +26,7 @@ async function storeKeyPair(keyPair) {
   })
 }
 
-export async function loadKeyPair() {
+export async function loadKeyPair(): Promise<CryptoKeyPair | null> {
   const db = await openDB()
   return new Promise((resolve, reject) => {
     const tx = db.transaction(STORE_NAME, 'readonly')
@@ -36,7 +36,7 @@ export async function loadKeyPair() {
   })
 }
 
-async function clearKeyPair() {
+async function clearKeyPair(): Promise<void> {
   const db = await openDB()
   return new Promise((resolve, reject) => {
     const tx = db.transaction(STORE_NAME, 'readwrite')
@@ -47,7 +47,7 @@ async function clearKeyPair() {
 }
 
 // ── Key generation ─────────────────────────────────────────────────────────────
-export async function generateKeyPair() {
+export async function generateKeyPair(): Promise<CryptoKeyPair> {
   const keyPair = await crypto.subtle.generateKey(
     { name: 'ECDSA', namedCurve: 'P-256' },
     false, // non-extractible
@@ -57,14 +57,14 @@ export async function generateKeyPair() {
   return keyPair
 }
 
-export async function getOrCreateKeyPair() {
+export async function getOrCreateKeyPair(): Promise<CryptoKeyPair> {
   const kp = await loadKeyPair()
   if (kp?.privateKey && kp?.publicKey) return kp
   return generateKeyPair()
 }
 
 // ── Key export ─────────────────────────────────────────────────────────────────
-export async function exportPublicKeyPEM(publicKey) {
+export async function exportPublicKeyPEM(publicKey: CryptoKey): Promise<string> {
   const spki = await crypto.subtle.exportKey('spki', publicKey)
   const b64 = arrayBufferToBase64(spki)
   const lines = b64.match(/.{1,64}/g).join('\n')
@@ -72,13 +72,13 @@ export async function exportPublicKeyPEM(publicKey) {
 }
 
 // ── Signing ────────────────────────────────────────────────────────────────────
-export async function signPayload(privateKey, payload) {
+export async function signPayload(privateKey: CryptoKey, payload: string): Promise<string> {
   const data = new TextEncoder().encode(payload)
   const signature = await crypto.subtle.sign({ name: 'ECDSA', hash: 'SHA-256' }, privateKey, data)
   return arrayBufferToBase64(signature)
 }
 
-export async function signChallenge(challenge) {
+export async function signChallenge(challenge: string): Promise<{ nonce: string, timestamp: string, signature: string, challenge: string }> {
   const keyPair = await getOrCreateKeyPair()
   const nonce = crypto.randomUUID()
   const timestamp = new Date().toISOString()
@@ -86,17 +86,17 @@ export async function signChallenge(challenge) {
   return { nonce, timestamp, signature, challenge }
 }
 
-export async function signRegisterChallenge(challenge) {
+export async function signRegisterChallenge(challenge: string): Promise<{ challenge: string, signature: string }> {
   const keyPair = await getOrCreateKeyPair()
   const signature = await signPayload(keyPair.privateKey, challenge)
   return { challenge, signature }
 }
 
 // ── Device-bound session headers ───────────────────────────────────────────────
-export async function makeSignature() {
+export async function makeSignature(): Promise<{ nonce: string, timestamp: string, signature: string }> {
   try {
     const kp = await loadKeyPair()
-    if (!kp?.privateKey) return {}
+    if (!kp?.privateKey) return
     const nonce = crypto.randomUUID()
     const timestamp = new Date().toISOString()
     const signature = await signPayload(kp.privateKey, nonce + '|' + timestamp)
@@ -106,19 +106,24 @@ export async function makeSignature() {
       signature,
     }
   } catch (_) {
-    return {}
+    return
   }
 }
 
-export async function makeDeviceHeaders(deviceId) {
+export async function makeDeviceHeaders(deviceId: string): Promise<{ [key: string]: string } | {}> {
   if (!deviceId) return {}
   try {
     const kp = await makeSignature()
-    return { 
+    if (kp) {
+      return { 
+        'X-Device-ID': deviceId,
+        'X-Device-Nonce': kp.nonce,
+        'X-Device-Timestamp': kp.timestamp,
+        'X-Device-Signature': kp.signature,
+      }
+    }
+    return {
       'X-Device-ID': deviceId,
-      'X-Device-Nonce': kp.nonce,
-      'X-Device-Timestamp': kp.timestamp,
-      'X-Device-Signature': kp.signature,
     }
   } catch (_) {
     return {}
@@ -126,7 +131,7 @@ export async function makeDeviceHeaders(deviceId) {
 }
 
 // ── Hardware detection ─────────────────────────────────────────────────────────
-export async function detectHardwareLevel() {
+export async function detectHardwareLevel(): Promise<{ level: string, provider: string }> {
   try {
     if (!window.PublicKeyCredential) return { level: 'software', provider: 'software' }
     const available = await PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable()

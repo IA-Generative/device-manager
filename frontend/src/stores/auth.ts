@@ -3,11 +3,9 @@ import { ref, computed } from 'vue'
 import { decodeJWT, isTokenExpired } from '@/lib/api'
 
 const ACCESS_TOKEN_KEY = 'device-service:access-token'
-const DEVICE_ID_KEY = 'device-service:last-device-id'
 
 export const useAuthStore = defineStore('auth', () => {
   const accessToken = ref(sessionStorage.getItem(ACCESS_TOKEN_KEY) || '')
-  const deviceId = ref(localStorage.getItem(DEVICE_ID_KEY) || '')
 
   const isAuthenticated = computed(() => !!accessToken.value && !isTokenExpired(accessToken.value))
 
@@ -23,25 +21,18 @@ export const useAuthStore = defineStore('auth', () => {
     sessionStorage.setItem(ACCESS_TOKEN_KEY, token)
   }
 
-  function setDeviceId(id) {
-    deviceId.value = id
-    localStorage.setItem(DEVICE_ID_KEY, id)
-  }
 
   function clear() {
     accessToken.value = ''
     sessionStorage.removeItem(ACCESS_TOKEN_KEY)
-    localStorage.removeItem(DEVICE_ID_KEY)
   }
 
   return {
     accessToken,
-    deviceId,
     isAuthenticated,
     user,
     username,
     setToken,
-    setDeviceId,
     clear
   }
 })

@@ -26,6 +26,7 @@ var (
     ErrInvalidSignature      = errors.New("invalid device signature")
     ErrChallengeExpired      = errors.New("challenge expired")
     ErrReplayAttack          = errors.New("nonce already used")
+    ErrDeviceNotFound        = errors.New("device not found")
     ErrTimestampOutOfWindow  = errors.New("timestamp out of allowed window")
 )
 

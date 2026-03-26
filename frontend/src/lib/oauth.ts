@@ -47,7 +47,7 @@ export function clearPendingOAuth() {
  * Builds the Keycloak authorization URL and saves pending state.
  * Returns the URL string.
  */
-export async function buildAuthUrl(discover, { redirectUri, deviceId = '' } = {}) {
+export async function buildAuthUrl(discover, { redirectUri, deviceId = '' }: { redirectUri?: string, deviceId?: string } = {}) {
   const state = randomString(24)
   const nonce = randomString(24)
   const codeVerifier = randomString(64)

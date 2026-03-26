@@ -8,16 +8,16 @@ import (
 	"github.com/ia-generative/device-service/internal/service"
 )
 
-type AuthHandler struct {
+type DiscoverHandler struct {
 	cfg *config.Config
 	svc *service.DeviceService
 }
 
-func NewAuthHandler(cfg *config.Config, svc *service.DeviceService) *AuthHandler {
-	return &AuthHandler{cfg: cfg, svc: svc}
+func NewDiscoverHandler(cfg *config.Config, svc *service.DeviceService) *DiscoverHandler {
+	return &DiscoverHandler{cfg: cfg, svc: svc}
 }
 
-type authRequest struct {
+type discoverRequest struct {
 	UserID             string `json:"sub"`
 	ClientID           string `json:"client_id"`
 	RedirectURI        string `json:"redirect_uri"`
@@ -33,7 +33,7 @@ type authRequest struct {
 	ChallengeSignature string `json:"challenge_signature,omitempty"`
 }
 
-func (h *AuthHandler) baseResponse(clientID, redirectURI, deviceID string) map[string]interface{} {
+func (h *DiscoverHandler) baseResponse(clientID, redirectURI, deviceID string) map[string]interface{} {
 	authBaseURL := strings.TrimRight(h.cfg.KeycloakPublicURI, "/")
 	tokenPath := "/realms/" + h.cfg.KeycloakRealm + "/protocol/openid-connect/token"
 
@@ -47,7 +47,7 @@ func (h *AuthHandler) baseResponse(clientID, redirectURI, deviceID string) map[s
 }
 
 // GET /discover
-func (h *AuthHandler) Discover(w http.ResponseWriter, r *http.Request) {
+func (h *DiscoverHandler) Discover(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		jsonError(w, "method not allowed", http.StatusMethodNotAllowed)
 		return

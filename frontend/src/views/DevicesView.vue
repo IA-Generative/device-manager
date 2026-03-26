@@ -40,9 +40,11 @@ import DeviceTable from '@/components/DeviceTable.vue'
 import { useAuthStore } from '@/stores/auth.js'
 import { useDeviceApi } from '@/composables/useDeviceApi.js'
 import { useDeviceCrypto } from '@/composables/useDeviceCrypto.js'
+import { useDeviceStore } from '@/stores/device'
 
 const auth = useAuthStore()
 const api = useDeviceApi()
+const device = useDeviceStore()
 const crypto = useDeviceCrypto()
 
 const banner = ref({ type: 'info', msg: 'Chargement…' })
@@ -52,7 +54,7 @@ const trustScore = ref(null)
 const trustWarning = ref(false)
 const canManage = ref(false)
 
-const currentDeviceId = computed(() => auth.deviceId)
+const currentDeviceId = computed(() => device.deviceId)
 
 let pollTimer = null
 
@@ -76,7 +78,7 @@ async function load() {
       try {
         const trust = await api.getDeviceTrust(currentDeviceId.value)
         trustScore.value = trust.trust_score
-        canManage.value = trust.trust_score >= 70
+        canManage.value = trust.trust_score > 40
         trustWarning.value = !canManage.value
       } catch (_) { canManage.value = false }
     }

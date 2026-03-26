@@ -53,14 +53,14 @@ func main() {
 		cfg.SMTPUsername, cfg.SMTPPassword,
 		service.SMTPEncryption(cfg.SMTPEncryption),
 	)
-	svc := service.NewDeviceServiceWithConfig(repo, rdb, emailSvc, logger, cfg)
-	attestSvc := service.NewAttestationService(svc, cfg.AttestationMode, logger)
-	riskSvc := service.NewRiskService(svc, cfg, logger)
+	deviceSvc := service.NewDeviceServiceWithConfig(repo, rdb, emailSvc, logger, cfg)
+	attestSvc := service.NewAttestationService(deviceSvc, logger)
+	riskSvc := service.NewRiskService(deviceSvc, cfg, logger)
 
 	probeHandler := handler.NewProbeHandler(pg, rdb, logger)
-	authHandler := handler.NewAuthHandler(cfg, svc)
-	deviceHandler := handler.NewDeviceHandler(svc, attestSvc, riskSvc, cfg, logger)
-	attestHandler := handler.NewAttestationHandler(attestSvc, riskSvc, logger)
+	discoverHandler := handler.NewDiscoverHandler(cfg, deviceSvc)
+	deviceHandler := handler.NewDeviceHandler(deviceSvc, attestSvc, riskSvc, cfg, logger)
+	attestHandler := handler.NewAttestationHandler(attestSvc, deviceSvc, riskSvc, logger)
 
 	// Router
 	r := chi.NewRouter()
@@ -79,12 +79,13 @@ func main() {
 	// Kubernetes probes (pas d'auth)
 	r.Get("/healthz", probeHandler.Liveness)
 	r.Get("/readyz", probeHandler.Readiness)
-	r.Get("/discover", authHandler.Discover)
-	
+	r.Get("/discover", discoverHandler.Discover)
+
 	// Device endpoints (JWT requis)
 	r.Group(func(r chi.Router) {
 		r.Use(authmw.JWTAuth(cfg.JWKSEndpoint, logger))
-		
+		r.Use(authmw.DeviceAuthExtract(logger))
+
 		r.Get("/devices/{device_id}/status", deviceHandler.Status)
 		r.Post("/devices/register", deviceHandler.Register)
 		r.Post("/devices/register/challenge", attestHandler.RegisterChallenge)
@@ -100,18 +101,10 @@ func main() {
 
 		// Attestation endpoints
 		r.Post("/devices/{device_id}/challenge", attestHandler.Challenge)
-		r.Post("/devices/{device_id}/verify", attestHandler.Verify)
+		r.Post("/devices/verify", attestHandler.Verify)
+		r.Get("/devices/verify", attestHandler.Verify)
 		r.Post("/devices/{device_id}/reattest", attestHandler.Reattest)
-		r.Post("/devices/{device_id}/upgrade-key", attestHandler.UpgradeKey)
 		r.Get("/devices/{device_id}/trust", attestHandler.TrustScore)
-	})
-
-	// Protected endpoints requiring device signature (device-bound sessions)
-	r.Group(func(r chi.Router) {
-		r.Use(authmw.JWTAuth(cfg.JWKSEndpoint, logger))
-		r.Use(authmw.DeviceSignature(attestSvc, cfg.RequireDeviceSignature, logger))
-		// Ajouter ici les endpoints sensibles nécessitant signature device
-		// Par exemple : r.Post("/sensitive/action", sensitiveHandler.Action)
 	})
 
 	srv := &http.Server{

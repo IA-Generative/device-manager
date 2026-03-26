@@ -96,3 +96,11 @@ textarea {
   border: 1px solid #ccc;
   font-size: 14px;
 }
+
+.button-row {
+  width: 100%;
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  justify-content: space-between;
+}

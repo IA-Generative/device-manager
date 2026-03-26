@@ -84,11 +84,11 @@ func (e *EmailService) SendDeviceApprovalCode(to, deviceName, code string) error
 	}
 	msg := []byte(
 		"To: " + to + "\r\n" +
-		"From: " + e.from + "\r\n" +
-		"Subject: " + subject + "\r\n" +
-		"Content-Type: text/html; charset=utf-8\r\n" +
-		"\r\n" +
-		body.String(),
+			"From: " + e.from + "\r\n" +
+			"Subject: " + subject + "\r\n" +
+			"Content-Type: text/html; charset=utf-8\r\n" +
+			"\r\n" +
+			body.String(),
 	)
 	return e.sendMail([]string{to}, msg)
 }

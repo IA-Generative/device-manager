@@ -1,9 +1,11 @@
 import { useAuthStore } from '@/stores/auth'
 import { apiFetch, DEVICE_SERVICE_BASE_URL } from '@/lib/api'
 import { buildAuthUrl, exchangeCode, hasOAuthCallbackParams, clearOAuthQueryParams } from '@/lib/oauth'
+import { useDeviceStore } from '@/stores/device'
 
 export function useOAuth() {
   const auth = useAuthStore()
+  const device = useDeviceStore()
 
   async function discover() {
     const data = await apiFetch(`${DEVICE_SERVICE_BASE_URL}/discover`)
@@ -11,12 +13,12 @@ export function useOAuth() {
     return data
   }
 
-  async function redirectToLogin(options = {}) {
+  async function redirectToLogin(options: { redirectUri?: string } = {}) {
     const disc = await discover()
     const redirectUri = options.redirectUri ?? `${window.location.origin}/`
     const url = await buildAuthUrl(disc, {
       redirectUri,
-      deviceId: auth.deviceId
+      deviceId: device.deviceId
     })
     window.location.assign(url)
   }

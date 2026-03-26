@@ -1,13 +1,13 @@
 import { apiFetch, DEVICE_SERVICE_BASE_URL } from '@/lib/api'
-import { useAuthStore } from '@/stores/auth'
 import { useSettingsStore } from '@/stores/settings'
 import {
   getOrCreateKeyPair, exportPublicKeyPEM, signRegisterChallenge,
   signChallenge, detectHardwareLevel, loadKeyPair, resetKeys, makeDeviceHeaders as _makeDeviceHeaders
 } from '@/lib/crypto'
+import { useDeviceStore } from '@/stores/device'
 
 export function useDeviceCrypto() {
-  const auth = useAuthStore()
+  const device = useDeviceStore()
   const settings = useSettingsStore()
 
   /**
@@ -16,10 +16,10 @@ export function useDeviceCrypto() {
    */
   async function buildRegisterPayload(accessToken: string) {
     const hwMode = settings.hardwareLevel
-    let publicKeyPEM = '', keyAlgorithm = '', hardwareLevel = 'software',
-      providerName = 'software', challenge = '', challengeSignature = ''
+    let publicKeyPEM = '', keyAlgorithm = '',
+      providerName = '', challenge = '', challengeSignature = ''
 
-    if (hwMode === 'none') return { publicKeyPEM, keyAlgorithm, hardwareLevel, providerName, challenge, challengeSignature }
+    if (hwMode === 'none') return { publicKeyPEM, keyAlgorithm, providerName, challenge, challengeSignature }
 
     try {
       const challengeResp = await apiFetch(`${DEVICE_SERVICE_BASE_URL}/devices/register/challenge`, {
@@ -36,23 +36,25 @@ export function useDeviceCrypto() {
       challengeSignature = signResult.signature
 
       if (hwMode === 'software') {
-        hardwareLevel = 'software'; providerName = 'software'
+        providerName = 'software'
       } else {
         const hwInfo = await detectHardwareLevel()
-        hardwareLevel = hwInfo.level; providerName = hwInfo.provider
+        providerName = hwInfo.provider
       }
     } catch (err) {
       console.warn('Attestation ceremony failed:', err.message)
-      return { publicKeyPEM: '', keyAlgorithm: '', hardwareLevel: 'software', providerName: 'software', challenge: '', challengeSignature: '' }
+      return { publicKeyPEM: '', keyAlgorithm: '', providerName: 'software', challenge: '', challengeSignature: '' }
     }
 
-    return { 
-      public_key: publicKeyPEM, 
-      key_algorithm: keyAlgorithm, 
-      hardware_level: hardwareLevel, 
-      provider_name: providerName, 
-      challenge, 
-      challenge_signature: challengeSignature }
+    const result = { 
+      public_key: publicKeyPEM,
+      key_algorithm: keyAlgorithm,
+      provider_name: providerName,
+      challenge,
+      challenge_signature: challengeSignature,
+    }
+    console.log('Register payload:', result)
+    return result
   }
 
   async function buildReattestPayload(deviceId, accessToken) {
@@ -68,16 +70,22 @@ export function useDeviceCrypto() {
       const kp = await loadKeyPair()
       if (kp?.publicKey) publicKeyPEM = await exportPublicKeyPEM(kp.publicKey)
     } catch (_) {}
-
-    return {
+    if (!publicKeyPEM) {
+      console.warn('No key available for re-attestation, proceeding without public key')
+      hwInfo.level = ''
+      hwInfo.provider = ''
+    }
+    const result = {
       signature: signData.signature,
       timestamp: signData.timestamp,
       nonce: signData.nonce,
       public_key: publicKeyPEM,
       key_algorithm: 'ES256',
-      hardware_level: hwInfo.level,
       provider_name: hwInfo.provider
     }
+    console.log(result);
+    
+    return result
   }
 
   async function makeDeviceHeaders(deviceId) {
@@ -85,7 +93,7 @@ export function useDeviceCrypto() {
   }
 
   async function reset() {
-    auth.setDeviceId('')
+    device.setDeviceId('')
     await resetKeys()
   }
 

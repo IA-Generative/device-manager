@@ -45,7 +45,7 @@ func (h *DeviceHandler) Register(w http.ResponseWriter, r *http.Request) {
 
 	h.logger.Info("register device request", zap.String("user_id", userID))
 
-	var req authRequest
+	var req discoverRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil && !errors.Is(err, io.EOF) {
 		resp := map[string]interface{}{
 			"message": "invalid request body",
@@ -62,10 +62,22 @@ func (h *DeviceHandler) Register(w http.ResponseWriter, r *http.Request) {
 		Platform:           req.Platform,
 		PublicKey:          req.PublicKey,
 		KeyAlgorithm:       req.KeyAlgorithm,
-		HardwareLevel:      req.HardwareLevel,
 		ProviderName:       req.ProviderName,
 		Challenge:          req.Challenge,
 		ChallengeSignature: req.ChallengeSignature,
+	}
+
+	if h.cfg.RequireDeviceSignature &&
+		(registerReq.PublicKey == "" ||
+		 registerReq.Challenge == "" ||
+		 registerReq.ChallengeSignature == "" ||
+		 registerReq.KeyAlgorithm == "" ||
+		 registerReq.ProviderName == ""	) {
+		resp := map[string]interface{}{
+			"message": "device signature required",
+		}
+		jsonResponse(w, resp, http.StatusBadRequest)
+		return
 	}
 
 	// Extract email from JWT context (Architecture B — email challenge)
@@ -96,8 +108,7 @@ func (h *DeviceHandler) Register(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		h.logger.Info("register challenge verified",
-			zap.String("user_id", userID),
-			zap.String("hardware_level", registerReq.HardwareLevel))
+			zap.String("user_id", userID))
 	} else if registerReq.PublicKey != "" && (registerReq.Challenge == "" || registerReq.ChallengeSignature == "") {
 		h.logger.Warn("register with key but no challenge proof — key binding not verified",
 			zap.String("user_id", userID))
@@ -134,10 +145,10 @@ func (h *DeviceHandler) Register(w http.ResponseWriter, r *http.Request) {
 		}
 
 		resp := map[string]interface{}{
-			"device_status": device.Status,
-			"message":       "device created",
-			"device_id":     device.DeviceID,
-			"trust_score":   trustScore,
+			"status":      device.Status,
+			"message":     "device created",
+			"device_id":   device.DeviceID,
+			"trust_score": trustScore,
 		}
 		if device.Status == model.StatusPendingApproval {
 			resp["message"] = "device pending approval from an existing trusted device"
@@ -167,17 +178,17 @@ func (h *DeviceHandler) Register(w http.ResponseWriter, r *http.Request) {
 	if device.Status == model.StatusActive {
 		_ = h.svc.TouchLastSeen(r.Context(), req.DeviceID)
 		resp := map[string]interface{}{
-			"device_status": device.Status,
-			"message":       "device active, timestamp updated",
-			"device_id":     req.DeviceID,
+			"status":    device.Status,
+			"message":   "device active, timestamp updated",
+			"device_id": req.DeviceID,
 		}
 		jsonResponse(w, resp, http.StatusOK)
 		return
 	}
 
 	resp := map[string]interface{}{
-		"device_status": device.Status,
-		"device_id":     req.DeviceID,
+		"status":    device.Status,
+		"device_id": req.DeviceID,
 	}
 	switch device.Status {
 	case model.StatusRevoked:
@@ -234,7 +245,7 @@ func (h *DeviceHandler) Status(w http.ResponseWriter, r *http.Request) {
 		jsonError(w, "device not found", http.StatusNotFound)
 		return
 	}
-	
+
 	jsonResponse(w, sr, http.StatusOK)
 }
 

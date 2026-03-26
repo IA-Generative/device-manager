@@ -19,16 +19,16 @@
           <DeviceStatusBadge :status="d.status" />
         </td>
         <td>
-          <HwBadge :level="d.attestation_type" />
+          <HwBadge :level="d.provider_name" />
         </td>
         <td>
           <TrustBadge :score="d.trust_score ?? null" />
         </td>
         <td>{{ fmtDate(d.created_at) }}</td>
         <td class="actions">
+          <button v-if="d.status === 'active'" class="btn-sm danger" @click="$emit('revoke', d.device_id)">Revoke</button>
+          <button v-if="d.device_id === currentDeviceId" class="btn-sm" @click="$emit('reattest', d.device_id)">Re-attest</button>
           <template v-if="canManage">
-            <button v-if="d.status === 'active'" class="btn-sm danger" @click="$emit('revoke', d.device_id)">Revoke</button>
-            <button v-if="d.status === 'active'" class="btn-sm" @click="$emit('reattest', d.device_id)">Re-attest</button>
             <template v-if="d.status === 'pending_approval'">
               <button class="btn-sm ok" @click="$emit('approve', d.device_id)">Approve</button>
               <button class="btn-sm danger" @click="$emit('reject', d.device_id)">Reject</button>

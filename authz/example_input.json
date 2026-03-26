@@ -1,13 +1,13 @@
 {
-  "route": "/api/v1/orders/42",
-  "method": "GET",
   "request": {
+    "route": "/api/v1/orders/42",
+    "method": "GET",
     "headers": {
       "authorization": "Bearer your-access-token",
-      "x_device_id": "dev-abc-123",
-      "x_device_nonce": "550e8400-e29b-41d4-a716-446655440000",
-      "x_device_timestamp": "2026-03-19T12:00:00Z",
-      "x_device_signature": "MEUCIQD...base64..."
+      "x-device-id": "dev-abc-123",
+      "x-device-signature": "550e8400-e29b-41d4-a716-446655440000",
+      "x-device-timestamp": "2026-03-25T13:42:06.516Z",
+      "x-device-nonce": "MEUCIQD...base64..."
     }
   }
 }

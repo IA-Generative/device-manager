@@ -12,5 +12,13 @@
 
 <script setup lang="ts">
 import { useSettingsStore, type HardwareLevel } from '@/stores/settings.js'
+
 const settings = useSettingsStore()
+
+const levels: Record<HardwareLevel, string> = {
+  auto: 'Auto-detect',
+  none: 'Disabled (no key)',
+  software: 'Software key',
+  hardware: 'Hardware key (TPM/Secure Enclave)',
+}
 </script>

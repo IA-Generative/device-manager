@@ -1,29 +1,15 @@
 <template>
 
-  <button :disabled="!auth.deviceId" @click="call">
-    Status Call
-  </button>
 </template>
 
 <script setup lang="ts">
 import { useDeviceApi } from '@/composables/useDeviceApi';
-import { useAuthStore } from '@/stores/auth';
+import { useDeviceStore } from '@/stores/device';
 
-
-const props = defineProps<{
-  logFn: (label: string, data: unknown) => void
+const emits = defineEmits<{
+  data: [data: any]
 }>()
 
-const auth = useAuthStore()
+const device = useDeviceStore()
 const api = useDeviceApi()
-
-async function call() {
-  try {
-    const response = await api.getStatus(auth.deviceId)
-    props.logFn('API CALL response headers', response)
-  } catch (err) {
-    console.error('API Call Error:', err)
-  }
-}
-
 </script>

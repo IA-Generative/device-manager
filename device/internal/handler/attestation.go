@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"strconv"
 
 	"github.com/go-chi/chi/v5"
 	"go.uber.org/zap"
@@ -16,17 +17,20 @@ import (
 
 type AttestationHandler struct {
 	attestSvc *service.AttestationService
+	deviceSvc *service.DeviceService
 	riskSvc   *service.RiskService
 	logger    *zap.Logger
 }
 
 func NewAttestationHandler(
 	attestSvc *service.AttestationService,
+	deviceSvc *service.DeviceService,
 	riskSvc *service.RiskService,
 	logger *zap.Logger,
 ) *AttestationHandler {
 	return &AttestationHandler{
 		attestSvc: attestSvc,
+		deviceSvc: deviceSvc,
 		riskSvc:   riskSvc,
 		logger:    logger,
 	}
@@ -87,48 +91,134 @@ func (h *AttestationHandler) Challenge(w http.ResponseWriter, r *http.Request) {
 	jsonResponse(w, resp, http.StatusOK)
 }
 
-// POST /devices/{device_id}/verify
+// POST /devices/verify
 // Vérifie une signature sur un challenge (device-bound session proof)
 func (h *AttestationHandler) Verify(w http.ResponseWriter, r *http.Request) {
-	deviceID := chi.URLParam(r, "device_id")
-
-	var req model.VerifyChallengeRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		jsonError(w, "invalid request body", http.StatusBadRequest)
+	userID, ok := r.Context().Value(ctxkeys.UserID).(string)
+	if !ok || userID == "" {
+		jsonError(w, "unauthorized", http.StatusUnauthorized)
 		return
 	}
-	req.DeviceID = deviceID
 
-	if err := h.attestSvc.VerifyRequestSignature(
-		r.Context(),
-		req.DeviceID,
-		req.Nonce,
-		req.Timestamp,
-		req.Signature,
-	); err != nil {
-		h.logger.Warn("signature verification failed",
-			zap.String("device_id", deviceID),
-			zap.Error(err))
-		jsonError(w, err.Error(), http.StatusUnauthorized)
+	var req model.VerifyChallengeRequest
+	// parse JSON body if present, otherwise fallback to headers (for GET requests or clients that can't send JSON)
+	if r.Method == http.MethodPost && r.Body != nil {
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			jsonError(w, "invalid request body", http.StatusBadRequest)
+			return
+		}
+	}
+	w.Header().Add("X-User-ID", userID)
+
+	if req.Nonce == "" {
+		req.Nonce = r.Context().Value(ctxkeys.DeviceNonce).(string)
+	}
+	if req.Timestamp == "" {
+		req.Timestamp = r.Context().Value(ctxkeys.DeviceTimestamp).(string)
+	}
+	if req.Signature == "" {
+		req.Signature = r.Context().Value(ctxkeys.DeviceSignature).(string)
+	}
+	if req.DeviceID == "" {
+		req.DeviceID = r.Context().Value(ctxkeys.DeviceID).(string)
+	}
+
+	if req.DeviceID == "" {
+		jsonError(w, "device_id is required", http.StatusBadRequest)
 		return
+	}
+
+	var resp *model.VerifyResponse = &model.VerifyResponse{
+		DeviceID: req.DeviceID,
+		UserID:   userID,
+		Verified: false, // par défaut à false, passe à true si vérification réussie
+		Message:  "",
+		Code:     401,
+	}
+
+	if req.Nonce == "" || req.Timestamp == "" || req.Signature == "" {
+		sr, err := h.deviceSvc.Status(r.Context(), req.DeviceID)
+		if err != nil {
+			resp.Code = http.StatusUnauthorized
+
+			if errors.Is(err, repository.ErrNotFound) {
+				resp.Message = "device not found"
+			} else {
+				resp.Message = "signature verification failed: " + err.Error()
+			}
+
+			h.logger.Error("failed to get device status",
+				zap.String("device_id", req.DeviceID),
+				zap.Error(err))
+		}
+		if sr.Signed {
+			resp.Code = http.StatusBadRequest
+			resp.Message = "nonce, timestamp and signature are required for this device"
+		}
+		if sr.Status == model.StatusActive {
+			resp.Verified = true
+			resp.Message = "device is active but has no registered key, skipping signature verification"
+			resp.Code = http.StatusOK
+		} else {
+			resp.Message = "device is not active"
+			resp.Code = http.StatusUnauthorized
+		}
+	} else {
+		vrsr, err := h.attestSvc.VerifyRequestSignature(
+			r.Context(),
+			req.DeviceID,
+			req.Nonce,
+			req.Timestamp,
+			req.Signature,
+			userID,
+		)
+
+		if err != nil {
+			h.logger.Warn("signature verification failed",
+				zap.String("device_id", req.DeviceID),
+				zap.Error(err))
+			resp.Message = "signature verification failed: " + err.Error()
+			resp.Code = http.StatusUnauthorized
+		}
+		if vrsr.Verified {
+			resp.Message = "signature verified, device is active"
+			resp.Code = http.StatusOK
+			resp.Verified = true
+		} else {
+			resp.Message = vrsr.Message
+			resp.Code = http.StatusUnauthorized
+		}
 	}
 
 	// Recalculate trust score after successful verification
-	trustResp, err := h.riskSvc.ComputeTrustScore(r.Context(), deviceID)
+	trustResp, err := h.riskSvc.ComputeTrustScore(r.Context(), req.DeviceID)
 	if err != nil {
+		resp.Message += "; failed to compute trust score: " + err.Error()
+		resp.Code = http.StatusInternalServerError
 		h.logger.Warn("trust score computation failed after verify",
-			zap.String("device_id", deviceID),
+			zap.String("device_id", req.DeviceID),
 			zap.Error(err))
 	}
 
-	resp := map[string]interface{}{
-		"verified":  true,
-		"device_id": deviceID,
-	}
 	if trustResp != nil {
-		resp["trust_score"] = trustResp.TrustScore
+		resp.TrustScore = &trustResp.TrustScore
 	}
-	jsonResponse(w, resp, http.StatusOK)
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("X-User-ID", userID)
+	w.Header().Set("X-Device-ID", req.DeviceID)
+	w.Header().Set("X-Verified", strconv.FormatBool(resp.Verified))
+	if resp.TrustScore != nil {
+		w.Header().Set("X-Trust-Score", strconv.Itoa(*resp.TrustScore))
+	}
+
+	w.WriteHeader(resp.Code)
+	json.NewEncoder(w).Encode(map[string]any{
+		"message": resp.Message,
+		"verified": resp.Verified,
+		"trust_score": *resp.TrustScore,
+		"device_id": resp.DeviceID,
+		"user_id": resp.UserID,
+	})
 }
 
 // POST /devices/{device_id}/reattest
@@ -150,39 +240,14 @@ func (h *AttestationHandler) Reattest(w http.ResponseWriter, r *http.Request) {
 	}
 	req.DeviceID = deviceID
 
-	// 0. Hardware level policy: check for downgrade attempt
-	if req.HardwareLevel != "" {
-		device, err := h.attestSvc.GetDevice(r.Context(), deviceID)
-		if err != nil {
-			h.logger.Error("failed to get device for hw check",
-				zap.String("device_id", deviceID),
-				zap.Error(err))
-			jsonError(w, "device not found", http.StatusNotFound)
-			return
-		}
-
-		currentLevel := "software"
-		if device.HardwareLevel != nil {
-			currentLevel = *device.HardwareLevel
-		}
-
-		if err := h.attestSvc.CheckHardwareLevelTransition(r.Context(), deviceID, currentLevel, req.HardwareLevel); err != nil {
-			h.logger.Warn("reattest hardware downgrade blocked",
-				zap.String("device_id", deviceID),
-				zap.String("current", currentLevel),
-				zap.String("requested", req.HardwareLevel))
-			jsonError(w, err.Error(), http.StatusForbidden)
-			return
-		}
-	}
-
 	// 1. Verify the signature (proves possession of the private key)
-	if err := h.attestSvc.VerifyRequestSignature(
+	if _, err := h.attestSvc.VerifyRequestSignature(
 		r.Context(),
 		req.DeviceID,
 		req.Nonce,
 		req.Timestamp,
 		req.Signature,
+		userID,
 	); err != nil {
 		h.logger.Warn("reattest signature failed",
 			zap.String("device_id", deviceID),
@@ -214,79 +279,11 @@ func (h *AttestationHandler) Reattest(w http.ResponseWriter, r *http.Request) {
 	}
 	if trustResp != nil {
 		resp["trust_score"] = trustResp.TrustScore
-		resp["breakdown"] = trustResp.Breakdown
 	}
 
 	h.logger.Info("device re-attested",
 		zap.String("device_id", deviceID),
 		zap.String("user_id", userID))
-
-	jsonResponse(w, resp, http.StatusOK)
-}
-
-// POST /devices/{device_id}/upgrade-key
-// Upgrade de clé : le device prouve qu'il possède l'ancienne clé
-// et fournit une nouvelle clé avec un hardware_level supérieur.
-func (h *AttestationHandler) UpgradeKey(w http.ResponseWriter, r *http.Request) {
-	deviceID := chi.URLParam(r, "device_id")
-
-	userID, ok := r.Context().Value(ctxkeys.UserID).(string)
-	if !ok || userID == "" {
-		jsonError(w, "unauthorized", http.StatusUnauthorized)
-		return
-	}
-
-	var req model.UpgradeKeyRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		jsonError(w, "invalid request body", http.StatusBadRequest)
-		return
-	}
-	req.DeviceID = deviceID
-
-	if req.PublicKey == "" || req.HardwareLevel == "" {
-		jsonError(w, "public_key and hardware_level are required", http.StatusBadRequest)
-		return
-	}
-
-	if err := h.attestSvc.UpgradeKey(
-		r.Context(),
-		deviceID, userID,
-		req.PublicKey, req.KeyAlgorithm, req.HardwareLevel, req.ProviderName,
-		req.Nonce, req.Timestamp, req.OldSignature,
-	); err != nil {
-		h.logger.Warn("key upgrade failed",
-			zap.String("device_id", deviceID),
-			zap.Error(err))
-		status := http.StatusBadRequest
-		if err.Error() == "device does not belong to this user" {
-			status = http.StatusForbidden
-		}
-		jsonError(w, err.Error(), status)
-		return
-	}
-
-	// Recompute trust score after upgrade
-	trustResp, err := h.riskSvc.ComputeTrustScore(r.Context(), deviceID)
-	if err != nil {
-		h.logger.Warn("trust score computation failed after key upgrade",
-			zap.String("device_id", deviceID),
-			zap.Error(err))
-	}
-
-	resp := map[string]interface{}{
-		"upgraded":       true,
-		"device_id":      deviceID,
-		"hardware_level": req.HardwareLevel,
-	}
-	if trustResp != nil {
-		resp["trust_score"] = trustResp.TrustScore
-		resp["breakdown"] = trustResp.Breakdown
-	}
-
-	h.logger.Info("device key upgraded",
-		zap.String("device_id", deviceID),
-		zap.String("user_id", userID),
-		zap.String("new_level", req.HardwareLevel))
 
 	jsonResponse(w, resp, http.StatusOK)
 }

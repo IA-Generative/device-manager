@@ -1,29 +1,48 @@
 <template>
-
-  <button @click="call">
-    Verify Call
-  </button>
+  <div class="button-row">
+    <div>
+      Verify Device
+    </div>
+    <div>
+      <button :disabled="!device.deviceId" @click="callWithBody">
+        Body
+      </button>
+      <button :disabled="!device.deviceId" @click="callWithHeaders">
+        Headers
+      </button>
+    </div>
+  </div>
 </template>
 
 <script setup lang="ts">
 import { useDeviceApi } from '@/composables/useDeviceApi';
-import { useAuthStore } from '@/stores/auth';
+import { useDeviceStore } from '@/stores/device';
 
-
-const props = defineProps<{
-  logFn: (label: string, data: unknown) => void
+const emits = defineEmits<{
+  data: [data: any]
 }>()
 
-const auth = useAuthStore()
 const api = useDeviceApi()
+const device = useDeviceStore()
+const deviceApi = useDeviceApi()
 
-async function call() {
+async function callWithBody() {
   try {
-    const response = await api.verifyDevice(auth.deviceId)
-    props.logFn('API CALL response headers', response)
+    const response = await api.verifyDevice(device.deviceId)
+    emits('data', response)
   } catch (err) {
+    emits('data', err.message ?? String(err))
     console.error('API Call Error:', err)
   }
 }
 
+async function callWithHeaders() {
+  try {
+    const response = await deviceApi.callAuth()
+    emits('data', await response)
+  } catch (err) {
+    emits('data', err.message ?? String(err))
+    console.error('API Auth Call Error:', err)
+  }
+}
 </script>

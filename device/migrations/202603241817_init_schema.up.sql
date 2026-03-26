@@ -22,7 +22,6 @@ CREATE TABLE IF NOT EXISTS devices (
     platform       VARCHAR,
     public_key     TEXT,
     key_algorithm  VARCHAR,
-    hardware_level VARCHAR,
     provider_name  VARCHAR,
     attested_at    TIMESTAMP,
     last_challenge VARCHAR,
@@ -45,22 +44,7 @@ CREATE TABLE IF NOT EXISTS devices (
 CREATE INDEX IF NOT EXISTS idx_devices_user_id        ON devices (user_id);
 CREATE INDEX IF NOT EXISTS idx_devices_device_id      ON devices (device_id);
 CREATE INDEX IF NOT EXISTS idx_devices_status         ON devices (status);
-CREATE INDEX IF NOT EXISTS idx_devices_hardware_level ON devices (hardware_level);
 CREATE INDEX IF NOT EXISTS idx_devices_trust_score    ON devices (trust_score);
 CREATE INDEX IF NOT EXISTS idx_devices_pending_user
     ON devices (user_id, status) WHERE status = 'pending_approval';
 
--- ── Vue d'audit ───────────────────────────────────────────────
-DROP VIEW IF EXISTS device_security_summary;
-CREATE VIEW device_security_summary AS
-SELECT
-    hardware_level,
-    COUNT(*)                                                        AS total,
-    COUNT(*) FILTER (WHERE status = 'active')                       AS active,
-    COUNT(*) FILTER (WHERE status = 'revoked')                      AS revoked,
-    COUNT(*) FILTER (WHERE status = 'suspended')                    AS suspended,
-    COUNT(*) FILTER (WHERE status = 'pending_approval')             AS pending_approval,
-    ROUND(AVG(trust_score), 1)                                      AS avg_trust_score,
-    COUNT(*) FILTER (WHERE reattest_at > NOW() - INTERVAL '24 hours') AS recently_attested
-FROM devices
-GROUP BY hardware_level;

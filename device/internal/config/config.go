@@ -6,21 +6,6 @@ import (
 	"strings"
 )
 
-type AttestationMode string
-
-const (
-	// AttestationSoftwareOnly : ECDSA logiciel uniquement, Secure Enclave/TPM refusé
-	// Cas d'usage : environnements de test, clients légers sans TPM
-	AttestationSoftwareOnly AttestationMode = "software_only"
-
-	// AttestationPreferHardware : software accepté, hardware préféré (optionnel)
-	// Cas d'usage : prod standard — on accepte tout mais on logue le niveau
-	AttestationPreferHardware AttestationMode = "prefer_hardware"
-
-	// AttestationRequireHardware : Secure Enclave/TPM obligatoire
-	// Cas d'usage : haute sécurité — devices sans TPM refusés
-	AttestationRequireHardware AttestationMode = "require_hardware"
-)
 
 // ApprovalMethod définit un mécanisme d'approbation pour l'enrollment.
 type ApprovalMethod string
@@ -42,7 +27,6 @@ type Config struct {
 	KeycloakRedirectURI string
 	KeycloakPublicURI   string
 	JWKSEndpoint        string
-	AttestationMode     AttestationMode
 	// Re-attestation
 	ReattestIntervalHours  int  // Interval between re-attestations (hours)
 	RequireDeviceSignature bool // Require X-Device-Signature on protected endpoints
@@ -90,7 +74,6 @@ func Load() *Config {
 		KeycloakRedirectURI: getEnv("KEYCLOAK_REDIRECT_URI", "http://localhost:8082/"),
 		KeycloakPublicURI:   getEnv("KEYCLOAK_PUBLIC_URI", "http://localhost:8081/"),
 		JWKSEndpoint:        getEnv("JWKS_ENDPOINT", "http://keycloak/realms/myapp/protocol/openid-connect/certs"),
-		AttestationMode:     AttestationMode(getEnv("ATTESTATION_MODE", string(AttestationPreferHardware))),
 		// Re-attestation
 		ReattestIntervalHours:  parseInt(getEnv("REATTEST_INTERVAL_HOURS", "24"), 24),
 		RequireDeviceSignature: parseBool(getEnv("REQUIRE_DEVICE_SIGNATURE", "false"), false),

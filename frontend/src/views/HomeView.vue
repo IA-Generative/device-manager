@@ -1,72 +1,63 @@
 <template>
-  <div>
-    <h1>Device Flow</h1>
-    <div class="grid">
+  <div class="grid">
+    <h1 style="grid-column: 1 / 2 span;">Device Flow</h1>
 
-      <!-- ── COLONNE GAUCHE : Authentification ──────────────────────────── -->
-      <div class="panel">
-        <h2>Connexion Keycloak</h2>
+    <!-- ── COLONNE GAUCHE : Authentification ──────────────────────────── -->
+    <div class="panel">
+      <h2>Connexion Keycloak</h2>
 
-        <div class="row">
-          <button :disabled="busy" @click="startRedirect">
-            Connexion
-          </button>
-        </div>
-
-        <div class="danger-zone">
-          <button :disabled="!auth.isAuthenticated" @click="logout">Se déconnecter</button>
-        </div>
-
-        <div class="auth-status" :class="auth.isAuthenticated ? 'ok' : 'ko'">
-          <template v-if="auth.isAuthenticated">
-            ✅ Connecté — <strong>{{ auth.username }}</strong>
-          </template>
-          <template v-else>⛔ Non connecté</template>
-        </div>
-
-        <StatusBanner v-if="authStatusMsg" :type="authStatusType" :message="authStatusMsg" />
-      </div>
-      <div class="panel">
-        <div v-if="auth.user" class="jwt-panel">
-          <div class="jwt-title">JWT Payload</div>
-          <pre class="jwt-pre">{{ JSON.stringify(auth.user, null, 2) }}</pre>
-        </div>
+      <div class="row">
+        <button :disabled="busy" @click="startRedirect">
+          Connexion
+        </button>
       </div>
 
-      <!-- ── COLONNE DROITE : Device ────────────────────────────────────── -->
-      <div class="panel">
-        <h2>Enregistrement device</h2>
-        <HwLevelSelector /> {{ settings.hardwareLevel }}
-
-        <div class="row">
-          <button :disabled="!auth.isAuthenticated || busy" @click="doRegister">
-            Enregistrer ce device
-          </button>
-          <button :disabled="!auth.isAuthenticated || !auth.deviceId || busy" @click="fakeCall">
-            Fake API Call
-          </button>
-          <ApiCallButton :log-fn="log"/>
-          <StatusButton :log-fn="log"/>
-          <VerifyButton :log-fn="log" />
-          <HeadersButton @data="(data) => debugData = data" />
-          <button @click="reset">Reset</button>
-        </div>
-
-        <StatusBanner v-if="deviceStatusMsg" :type="deviceStatusType" :message="deviceStatusMsg" />
-        <PendingApprovalPanel v-if="pendingDeviceId" :device-id="pendingDeviceId" @approved="onApproved" />
-
-        <div v-if="auth.deviceId" class="device-info">
-          <div class="device-info-title">Device actif</div>
-          <code>{{ auth.deviceId }}</code>
-        </div>
-
+      <div class="danger-zone">
+        <button :disabled="!auth.isAuthenticated" @click="logout">Se déconnecter</button>
       </div>
-      <div class="panel">
-        <DebugPanel :data="debugData" />
-        <LogOutput :content="logContent" />
+
+      <div class="auth-status" :class="auth.isAuthenticated ? 'ok' : 'ko'">
+        <template v-if="auth.isAuthenticated">
+          ✅ Connecté — <strong>{{ auth.username }}</strong>
+        </template>
+        <template v-else>⛔ Non connecté</template>
+      </div>
+
+      <StatusBanner v-if="authStatusMsg" :type="authStatusType" :message="authStatusMsg" />
+    </div>
+    <div class="panel">
+      <div v-if="auth.user" class="jwt-panel">
+        <div class="jwt-title">JWT Payload</div>
+        <pre class="jwt-pre">{{ JSON.stringify(auth.user, null, 2) }}</pre>
+      </div>
+    </div>
+
+    <!-- ── COLONNE DROITE : Device ────────────────────────────────────── -->
+    <div class="panel">
+      <h2>Enregistrement device</h2>
+      <HwLevelSelector />
+
+      <div class="col">
+        <RegisterButton @reset="reset" @data="(data) => debugData = data" />
+        <ApiCallButton @data="(data) => debugData = data" />
+        <StatusButton @data="(data) => debugData = data" />
+        <HeadersButton @data="(data) => debugData = data" />
+        <VerifyButton @data="(data) => debugData = data" />
+      </div>
+
+      <StatusBanner v-if="deviceStatusMsg" :type="deviceStatusType" :message="deviceStatusMsg" />
+      <PendingApprovalPanel v-if="home.pendingDeviceId" :device-id="home.pendingDeviceId" @approved="onApproved" />
+
+      <div v-if="device.deviceId" class="device-info">
+        <div class="device-info-title">{{ device.device?.status ?? 'Inconnu' }}</div>
+        <code>{{ device.deviceId }}</code>
       </div>
 
     </div>
+    <div class="panel">
+      <DebugPanel :data="debugData" />
+    </div>
+
   </div>
 </template>
 
@@ -76,21 +67,22 @@ import HwLevelSelector from '@/components/HwLevelSelector.vue'
 import StatusBanner from '@/components/StatusBanner.vue'
 import PendingApprovalPanel from '@/components/PendingApprovalPanel.vue'
 import DebugPanel from '@/components/DebugPanel.vue'
-import LogOutput from '@/components/LogOutput.vue'
 import { useAuthStore } from '@/stores/auth.js'
-import { useSettingsStore } from '@/stores/settings.js'
 import { useOAuth } from '@/composables/useOAuth.js'
-import { useDeviceCrypto } from '@/composables/useDeviceCrypto.js'
 import { useDeviceApi } from '@/composables/useDeviceApi.js'
 import ApiCallButton from '@/components/ApiCallButton.vue'
 import StatusButton from '@/components/StatusButton.vue'
 import VerifyButton from '@/components/VerifyButton.vue'
 import HeadersButton from '@/components/HeadersButton.vue'
+import { useDeviceStore } from '@/stores/device'
+import RegisterButton from '@/components/RegisterButton.vue'
+import { useDeviceCrypto } from '@/composables/useDeviceCrypto'
+import { useHomeStore } from '@/stores/home'
 
 const auth = useAuthStore()
-const settings = useSettingsStore()
+const device = useDeviceStore()
+const home = useHomeStore()
 const oauth = useOAuth()
-const deviceCrypto = useDeviceCrypto()
 const api = useDeviceApi()
 
 const busy = ref(false)
@@ -103,15 +95,12 @@ const authStatusType = ref('info')
 const deviceStatusMsg = ref('')
 const deviceStatusType = ref('info')
 
-const pendingDeviceId = ref<string | null>(null)
 const debugData = ref({})
 const logLines = ref<string[]>([])
-const logContent = ref('')
 
 function log(label: string, data: unknown) {
   const line = `[${label}] ${typeof data === 'object' ? JSON.stringify(data) : data}`
   logLines.value.push(line)
-  logContent.value = logLines.value.join('\n')
 }
 
 function setAuthStatus(type: string, msg: string) {
@@ -119,9 +108,14 @@ function setAuthStatus(type: string, msg: string) {
   authStatusMsg.value = msg
 }
 
+function onApproved() {
+  home.pendingDeviceId = null
+  setDeviceStatus('ok', '✅ Appareil approuvé !')
+}
+
 function setDeviceStatus(type: string, msg: string) {
-  deviceStatusType.value = type
-  deviceStatusMsg.value = msg
+  home.deviceStatusType = type
+  home.deviceStatusMsg = msg
 }
 
 // ── OAuth callback on page load ───────────────────────────────────────────────
@@ -141,6 +135,12 @@ onMounted(async () => {
     log('ERROR', err.message)
   } finally {
     busy.value = false
+  }
+
+  if (device.deviceId) {
+    const status = await api.getStatus(device.deviceId)
+    device.setDevice(status)
+    console.log('Device status on load:', status)
   }
 })
 
@@ -163,61 +163,14 @@ async function logout() {
     setAuthStatus('ko', err.message)
   }
 }
-
-// ── Device actions ────────────────────────────────────────────────────────────
-async function doRegister() {
-  busy.value = true
-  setDeviceStatus('info', 'Enregistrement du device…')
-  try {
-    const payload = await deviceCrypto.buildRegisterPayload(auth.accessToken)
-    debugData.value = { ...payload, public_key: payload.public_key ? payload.public_key.slice(0, 40) + '…' : '' }
-
-    const result = await api.register({
-      ...payload,
-      device_id: auth.deviceId,
-      name: navigator.userAgent.slice(0, 64),
-      user_agent: navigator.userAgent,
-      platform: navigator.platform || 'browser',
-    })
-    auth.setDeviceId(result.device_id)
-    log('REGISTER', result)
-
-    if (result.device_status === 'pending_approval') {
-      pendingDeviceId.value = result.device_id
-      setDeviceStatus('warn', 'Appareil enregistré — en attente d\'approbation.')
-    } else {
-      setDeviceStatus('ok', `Appareil actif ! (${result.device_id.slice(0, 8)}…)`)
-    }
-  } catch (err: any) {
-    setDeviceStatus('ko', err.message)
-    log('ERROR', err.message)
-  } finally {
-    busy.value = false
-  }
-}
-
-async function fakeCall() {
-  try {
-    const headers = await deviceCrypto.makeDeviceHeaders(auth.deviceId)
-    log('FAKE CALL', headers)
-    setDeviceStatus('ok', 'Headers device affichés dans le log.')
-  } catch (err: any) {
-    setDeviceStatus('ko', err.message)
-  }
-}
-
-function onApproved() {
-  pendingDeviceId.value = null
-  setDeviceStatus('ok', '✅ Appareil approuvé !')
-}
+const deviceCrypto = useDeviceCrypto()
 
 function reset() {
   // auth.clear()
   deviceCrypto.reset()
   logLines.value = []
-  logContent.value = ''
   debugData.value = {}
-  pendingDeviceId.value = null
+  home.pendingDeviceId = null
   authStatusMsg.value = ''
   deviceStatusMsg.value = ''
 }
@@ -241,7 +194,6 @@ h2 {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 16px;
-  /* align-items: start; */
 }
 
 @media (max-width: 700px) {
@@ -265,6 +217,13 @@ h2 {
   gap: 10px;
   flex-wrap: wrap;
   align-items: flex-end;
+}
+
+.col {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  align-items: flex-start;
 }
 
 .danger-zone {
@@ -310,7 +269,7 @@ h2 {
   font-size: 0.7rem;
   line-height: 1.5;
   overflow-x: auto;
-  max-height: 300px;
+  max-height: 250px;
   overflow-y: auto;
   background: #fff;
 }
