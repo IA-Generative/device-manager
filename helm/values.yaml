@@ -150,6 +150,16 @@ app:
     acr: 25
     crossDevice: 30
 
+# ── Frontend image / deployment ─────────────────────────────────────────────
+frontend:
+  # Enable deploying the frontend static site via this chart
+  enabled: true
+  # Optional runtime variables to inject into the backend so the SPA can
+  # pick them up via /env.js. If left empty, the backend will fall back to
+  # its defaults.
+  apiUrl: ""
+  exampleApiUrl: ""
+
 # ── Redis / Valkey ──────────────────────────────────────────────────────────
 redis:
   # Set external.enabled: true to skip the Valkey sub-chart and use your own

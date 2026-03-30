@@ -1,2 +1,0 @@
-allowed := data.apisix.authz.allow
-reason := data.apisix.authz.reason

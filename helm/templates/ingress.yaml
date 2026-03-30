@@ -5,6 +5,7 @@ metadata:
   name: {{ include "device-service.fullname" . }}
   labels:
     {{- include "device-service.labels" . | nindent 4 }}
+    app.kubernetes.io/component: app
   {{- with .Values.ingress.annotations }}
   annotations:
     {{- toYaml . | nindent 4 }}

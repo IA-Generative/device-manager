@@ -8,6 +8,8 @@ export function useOAuth() {
   const device = useDeviceStore()
 
   async function discover() {
+    console.log(`${DEVICE_SERVICE_BASE_URL}/discover`);
+    
     const data = await apiFetch(`${DEVICE_SERVICE_BASE_URL}/discover`)
     if (!data.auth_base_url || !data.realm || !data.client_id) throw new Error('/discover incomplet')
     return data

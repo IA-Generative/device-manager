@@ -40,6 +40,23 @@ RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-w -s" -o /app/device/device-ser
 RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-w -s" -o /app/device/entrypoint ./entrypoint.go
 
 
+# ── Frontend build stage ────────────────────────────────────────────────────
+# Build the frontend inside the backend image build context so the final
+# backend image contains the static assets at /static. This avoids creating a
+# separate frontend image and fits the "copy directly into backend" request.
+FROM node:20-alpine AS frontend-builder
+
+WORKDIR /app/frontend
+COPY frontend/package.json frontend/package-lock.json* ./
+RUN npm i --frozen-lockfile
+COPY frontend/ .
+ARG VITE_API_URL=http://localhost:8080
+ENV VITE_API_URL=${VITE_API_URL}
+RUN npm run build
+# Ensure files are world-readable for arbitrary UIDs (OpenShift)
+RUN chmod -R a+rX /app/frontend/dist
+
+
 FROM scratch AS prod
 
 
@@ -50,6 +67,7 @@ COPY --from=builder /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
 COPY --from=base /go/bin/migrate /usr/local/bin/migrate
 COPY --from=builder /app/device/migrations /migrations
 COPY --from=builder /app/device/templates /templates
+COPY --from=frontend-builder /app/frontend/dist /static
 
 EXPOSE 8080
 

@@ -20,6 +20,7 @@ spec:
         {{- toYaml . | nindent 8 }}
         {{- end }}
       labels:
+        app.kubernetes.io/component: app
         {{- include "device-service.labels" . | nindent 8 }}
         {{- with .Values.podLabels }}
         {{- toYaml . | nindent 8 }}
@@ -68,6 +69,18 @@ spec:
                 secretKeyRef:
                   name: {{ include "device-service.smtpSecretName" . }}
                   key: {{ include "device-service.smtpSecretPasswordKey" . }}
+            {{- end }}
+            {{- if .Values.frontend.enabled }}
+            - name: UI_ENABLED
+              value: "true"
+            {{- if .Values.frontend.apiUrl }}
+            - name: VITE_API_URL
+              value: {{ .Values.frontend.apiUrl | quote }}
+            {{- end }}
+            {{- if .Values.frontend.exampleApiUrl }}
+            - name: VITE_EXAMPLE_API_URL
+              value: {{ .Values.frontend.exampleApiUrl | quote }}
+            {{- end }}
             {{- end }}
           livenessProbe:
             httpGet:

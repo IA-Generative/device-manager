@@ -10,7 +10,7 @@ services:
       - ./frontend:/app
       - /app/node_modules        # garde le node_modules du conteneur
     environment:
-      VITE_API_URL: http://localhost:8080
+      VITE_API_URL: http://localhost:8080/api
     depends_on:
       device-service:
         condition: service_started
@@ -28,7 +28,11 @@ services:
       - "8080:8080"
     volumes:
       - ./device:/app
+      # For testing embedded UI -> UI_ENABLED: "true", VITE_EXAMPLE_API_URL=<if you want an url>
+      - ./frontend/dist:/static
     environment:
+      # VITE_EXAMPLE_API_URL: https://whatever
+      UI_ENABLED: "true"
       ENV: development
       PORT: "8080"
       DATABASE_URL: "postgres://device:device@postgres:5432/devicedb?sslmode=disable"
@@ -65,42 +69,6 @@ services:
       mailhog:
         condition: service_started
     restart: unless-stopped
-
-  # ── OPA AuthZ ────────────────────────────────────────────────────────────────
-  # opa:
-  #   build:
-  #     context: ./authz
-  #     dockerfile: Dockerfile
-  #   ports:
-  #     - "8181:8181"
-  #   environment:
-  #     DEVICE_SERVICE_URL: "http://device-service:8080"
-  #     BUNDLE_SERVER_URL:  "http://bundle-server:8080"
-  #     LOG_LEVEL: "WARN"
-  #   healthcheck:
-  #     test: ["CMD", "/opa", "health", "--addr=http://localhost:8181"]
-  #     interval: 10s
-  #     timeout:  5s
-  #     retries:  3
-  #   # depends_on:
-  #   #   device-service:
-  #   #     condition: service_healthy
-  #   restart: unless-stopped
-
-  # ── Bundle server (nginx servant les policies repackagées) ───────────────────
-  # Utile en prod pour recharger les policies sans restart OPA
-  bundle-server:
-    image: nginx:alpine
-    container_name: bundle-server
-    volumes:
-      - ./authz/bundles:/usr/share/nginx/html/bundles:ro
-    ports:
-      - "8090:8080"
-    healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://localhost:8080/health"]
-      interval: 10s
-      timeout:  5s
-      retries:  3
 
   postgres:
     image: postgres:16-alpine

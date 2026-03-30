@@ -6,7 +6,6 @@ import (
 	"strings"
 )
 
-
 // ApprovalMethod définit un mécanisme d'approbation pour l'enrollment.
 type ApprovalMethod string
 
@@ -17,6 +16,7 @@ const (
 )
 
 type Config struct {
+	UiEnabled						bool
 	Env                 string
 	Port                string
 	DatabaseURL         string
@@ -65,6 +65,7 @@ func Load() *Config {
 	keycloakRealm := getEnv("KEYCLOAK_REALM", "myapp")
 
 	return &Config{
+		UiEnabled: parseBool(getEnv("UI_ENABLED", "true"), false),
 		Env:                 getEnv("ENV", "development"),
 		Port:                getEnv("PORT", "8080"),
 		DatabaseURL:         getEnv("DATABASE_URL", "postgres://device:device@localhost:5432/devicedb?sslmode=disable"),

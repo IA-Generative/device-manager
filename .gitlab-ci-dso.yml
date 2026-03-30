@@ -47,4 +47,3 @@ build:
   stage: docker-build
   extends:
   - .kaniko:build-push
-
