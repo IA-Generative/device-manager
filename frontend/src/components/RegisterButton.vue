@@ -2,7 +2,7 @@
   <div class="button-row">
     <div>Appareil</div>
     <div>
-      <button :disabled="!!device.deviceId || home.busy" @click="doRegister">
+      <button :disabled="home.busy" @click="doRegister">
         Register
       </button>
       <button @click="reset" :disabled="!device.deviceId">Reset</button>
@@ -46,7 +46,6 @@ async function doRegister() {
   setDeviceStatus('info', 'Enregistrement du device…')
   try {
     const payload = await deviceCrypto.buildRegisterPayload(auth.accessToken)
-    emit('data', { ...payload, public_key: payload.public_key ? payload.public_key.slice(0, 40) + '…' : '' })
 
     const result = await api.register({
       ...payload,
@@ -56,10 +55,10 @@ async function doRegister() {
       platform: navigator.platform || 'browser',
     })
     device.setDeviceId(result.device_id)
-    const response = await api.getStatus(device.deviceId)
-    device.setDevice(response)
+    emit('data', result)
+    device.setDevice(result)
 
-    if (result.status === 'pending_approval') {
+    if (result.device_status === 'pending_approval' && result.approval_methods.includes('email')) {
       home.pendingDeviceId = result.device_id
       setDeviceStatus('warn', 'Appareil enregistré — en attente d\'approbation.')
     } else {

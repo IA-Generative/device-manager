@@ -1,6 +1,9 @@
 package model
 
-import "time"
+import (
+	"time"
+	cfg "github.com/ia-generative/device-service/internal/config"
+)
 
 type DeviceStatus string
 
@@ -65,12 +68,20 @@ type RegisterRequest struct {
 	Acr string `json:"-"`
 }
 
+type RenewCodeRequest struct {
+	UserID       string `json:"user_id"`
+	DeviceID     string `json:"device_id"`
+	// Email (extracted from JWT, not from request body)
+	Email string `json:"-"`
+}
+
 type StatusResponse struct {
 	DeviceID   string       `json:"device_id"`
 	UserID     string       `json:"user_id"`
 	TrustScore *int         `json:"trust_score"`
 	Status     DeviceStatus `json:"status"`
 	Signed     bool         `json:"device_signed"`
+	ApprovalMethods []cfg.ApprovalMethod `json:"approval_methods,omitempty"`
 }
 
 type VerifyResponse struct {
@@ -165,6 +176,11 @@ type RegisterResponse struct {
 	Status     DeviceStatus `json:"device_status"`
 	Message    string       `json:"message"`
 	TrustScore int          `json:"trust_score"`
+	ApprovalMethods []cfg.ApprovalMethod `json:"approval_methods,omitempty"`
+}
+
+type RenewCodeResponse struct {
+	Message    string       `json:"message"`
 }
 
 // EmailChallengeRequest pour valider le code email

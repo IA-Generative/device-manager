@@ -29,10 +29,10 @@ services:
     volumes:
       - ./device:/app
       # For testing embedded UI -> UI_ENABLED: "true", VITE_EXAMPLE_API_URL=<if you want an url>
-      - ./frontend/dist:/static
+      # - ./frontend/dist:/static
     environment:
       # VITE_EXAMPLE_API_URL: https://whatever
-      UI_ENABLED: "true"
+      # UI_ENABLED: "true"
       ENV: development
       PORT: "8080"
       DATABASE_URL: "postgres://device:device@postgres:5432/devicedb?sslmode=disable"
@@ -98,6 +98,13 @@ services:
       interval: 5s
       timeout: 5s
       retries: 5
+
+  redisinsight:
+    image: redis/redisinsight:latest
+    ports:
+      - 5540:5540
+    depends_on:
+      - redis
 
   keycloak:
     image: quay.io/keycloak/keycloak:26.4.2

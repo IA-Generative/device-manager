@@ -102,6 +102,7 @@ func main() {
 		r.Post("/api/devices/{device_id}/approve", deviceHandler.Approve)
 		r.Post("/api/devices/{device_id}/reject", deviceHandler.Reject)
 		r.Post("/api/me/devices/{device_id}/verify-email", deviceHandler.VerifyEmail)
+		r.Post("/api/me/devices/{device_id}/renew-code", deviceHandler.RenewCode)
 
 		// Attestation endpoints
 		r.Post("/api/devices/{device_id}/challenge", attestHandler.Challenge)

@@ -169,48 +169,48 @@ func (s *DeviceService) Register(ctx context.Context, req model.RegisterRequest)
 		s.logger.Error("failed to create device", zap.Error(err))
 		return nil, err
 	}
-
-	// ─── Actions post-enregistrement selon la décision de politique ─────────
-	if decision.NotifyExistingDevices {
-		event := `{"type":"pending_device","device_id":"` + device.DeviceID + `","name":"` + stringOrDefault(device.Name, "Nouveau device") + `","message":"Un nouveau device demande à être approuvé"}`
-		if pubErr := s.cache.PublishApprovalEvent(ctx, req.UserID, event); pubErr != nil {
-			s.logger.Warn("failed to publish approval event",
-				zap.String("user_id", req.UserID),
-				zap.Error(pubErr))
-		}
-	}
-
-	if decision.SendEmailChallenge {
-		code, err := generateOTPCode()
-		if err != nil {
-			s.logger.Warn("failed to generate email challenge", zap.Error(err))
-		} else {
-			ttl := time.Duration(s.cfg.EmailChallengeTTL) * time.Minute
-			if ttl <= 0 {
-				ttl = 30 * time.Minute
-			}
-			if err := s.cache.SetEmailChallenge(ctx, device.DeviceID, code, ttl); err != nil {
-				s.logger.Warn("failed to store email challenge", zap.Error(err))
-			} else if s.emailSvc != nil {
-				if err := s.emailSvc.SendDeviceApprovalCode(req.Email, stringOrDefault(device.Name, "Nouveau device"), code); err != nil {
-					s.logger.Warn("failed to send approval email",
-						zap.String("to", req.Email),
-						zap.Error(err))
-				} else {
-					s.logger.Info("approval email sent",
-						zap.String("to", req.Email),
-						zap.String("device_id", device.DeviceID))
-				}
-			}
-		}
-	}
-
+	
+	s.ApplyRegistrationDecision(ctx, decision, *device, req)
+	
 	s.logger.Info("device registered",
 		zap.String("device_id", device.DeviceID),
 		zap.String("status", string(initialStatus)),
 		zap.String("provider_name", providerName),
 	)
 	return device, nil
+}
+
+func (s *DeviceService) RenewOTPCode(ctx context.Context, req model.RenewCodeRequest) error {
+	deviceID := req.DeviceID
+	if deviceID == "" {
+		return errors.New("no device id provided")
+	}
+
+	device, err := s.repo.GetByDeviceID(ctx, deviceID)
+	if err != nil {
+		s.logger.Error("failed to get device", zap.Error(err))
+		return err
+	}
+
+	if req.UserID != device.UserID {
+		return repository.ErrNotFound
+	}
+
+	if device.Status != model.StatusPendingApproval {
+		return errors.New("device is not in pending approval")
+	}
+
+	if req.Email == "" {
+		return errors.New("can't retrieve email from authorization")
+	}
+
+	if !s.cfg.HasApprovalMethod(config.ApprovalEmail) {
+		return errors.New("validation by email is disabled")
+	}
+
+	s.SendEmailChallenge(ctx, *device, req.Email)
+
+	return nil
 }
 
 func (s *DeviceService) Get(ctx context.Context, deviceID string) (*model.Device, error) {
@@ -497,6 +497,52 @@ func (s *DeviceService) CountActiveDevices(ctx context.Context, userID string) (
 // SubscribeApproval souscrit au canal de notifications d'approbation d'un utilisateur
 func (s *DeviceService) SubscribeApproval(ctx context.Context, userID string) *redis.PubSub {
 	return s.cache.SubscribeApproval(ctx, userID)
+}
+
+func (s *DeviceService) GetDevicePendingApprovalMethods() []config.ApprovalMethod {
+	return s.cfg.ApprovalMethods
+}
+
+func (s *DeviceService) ApplyRegistrationDecision(ctx context.Context, decision *RegistrationDecision, device model.Device, req model.RegisterRequest) {
+	// ─── Actions post-enregistrement selon la décision de politique ─────────
+	if decision.NotifyExistingDevices {
+		event := `{"type":"pending_device","device_id":"` + device.DeviceID + `","name":"` + stringOrDefault(device.Name, "Nouveau device") + `","message":"Un nouveau device demande à être approuvé"}`
+		if pubErr := s.cache.PublishApprovalEvent(ctx, device.UserID, event); pubErr != nil {
+			s.logger.Warn("failed to publish approval event",
+				zap.String("user_id", device.UserID),
+				zap.Error(pubErr))
+		}
+	}
+
+	if decision.SendEmailChallenge {
+		s.SendEmailChallenge(ctx, device, req.Email)
+	}
+}
+
+func (s *DeviceService) SendEmailChallenge(ctx context.Context, device model.Device, email string) error {
+	code, err := generateOTPCode()
+	if err != nil {
+		s.logger.Warn("failed to generate email challenge", zap.Error(err))
+	} else {
+		ttl := time.Duration(s.cfg.EmailChallengeTTL) * time.Minute
+		if ttl <= 0 {
+			ttl = 30 * time.Minute
+		}
+		if err := s.cache.SetEmailChallenge(ctx, device.DeviceID, code, ttl); err != nil {
+			s.logger.Warn("failed to store email challenge", zap.Error(err))
+		} else if s.emailSvc != nil {
+			if err := s.emailSvc.SendDeviceApprovalCode(email, stringOrDefault(device.Name, "Nouveau device"), code); err != nil {
+				s.logger.Warn("failed to send approval email",
+					zap.String("to", email),
+					zap.Error(err))
+			} else {
+				s.logger.Info("approval email sent",
+					zap.String("to", email),
+					zap.String("device_id", device.DeviceID))
+			}
+		}
+	}
+	return nil
 }
 
 // helper

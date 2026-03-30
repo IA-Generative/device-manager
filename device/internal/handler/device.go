@@ -47,8 +47,8 @@ func (h *DeviceHandler) Register(w http.ResponseWriter, r *http.Request) {
 
 	var req discoverRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil && !errors.Is(err, io.EOF) {
-		resp := map[string]interface{}{
-			"message": "invalid request body",
+		resp := model.RegisterResponse{
+			Message: "invalid request body",
 		}
 		jsonResponse(w, resp, http.StatusBadRequest)
 		return
@@ -73,8 +73,8 @@ func (h *DeviceHandler) Register(w http.ResponseWriter, r *http.Request) {
 		 registerReq.ChallengeSignature == "" ||
 		 registerReq.KeyAlgorithm == "" ||
 		 registerReq.ProviderName == ""	) {
-		resp := map[string]interface{}{
-			"message": "device signature required",
+		resp := model.RegisterResponse{
+			Message: "device signature required",
 		}
 		jsonResponse(w, resp, http.StatusBadRequest)
 		return
@@ -101,8 +101,8 @@ func (h *DeviceHandler) Register(w http.ResponseWriter, r *http.Request) {
 			h.logger.Warn("register challenge verification failed",
 				zap.String("user_id", userID),
 				zap.Error(err))
-			resp := map[string]interface{}{
-				"message": "challenge signature verification failed: " + err.Error(),
+			resp := model.RegisterResponse{
+				Message: "challenge signature verification failed: " + err.Error(),
 			}
 			jsonResponse(w, resp, http.StatusBadRequest)
 			return
@@ -118,14 +118,14 @@ func (h *DeviceHandler) Register(w http.ResponseWriter, r *http.Request) {
 		device, err := h.svc.Register(r.Context(), registerReq)
 		if err != nil {
 			if errors.Is(err, service.ErrHardwareAttestationRequired) {
-				resp := map[string]interface{}{
-					"message": "hardware attestation required",
+				resp := model.RegisterResponse{
+					Message: "hardware attestation required",
 				}
 				jsonResponse(w, resp, http.StatusBadRequest)
 				return
 			}
-			resp := map[string]interface{}{
-				"message": "internal error",
+			resp := model.RegisterResponse{
+				Message: "internal error",
 			}
 			jsonResponse(w, resp, http.StatusInternalServerError)
 			return
@@ -144,14 +144,15 @@ func (h *DeviceHandler) Register(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 
-		resp := map[string]interface{}{
-			"status":      device.Status,
-			"message":     "device created",
-			"device_id":   device.DeviceID,
-			"trust_score": trustScore,
+		resp := model.RegisterResponse{
+			Status:      device.Status,
+			Message:     "device created",
+			DeviceID:   device.DeviceID,
+			TrustScore: trustScore,
 		}
 		if device.Status == model.StatusPendingApproval {
-			resp["message"] = "device pending approval from an existing trusted device"
+			resp.Message = "device pending approval from an existing trusted device"
+			resp.ApprovalMethods = h.svc.GetDevicePendingApprovalMethods()
 		}
 		jsonResponse(w, resp, http.StatusCreated)
 		return
@@ -160,16 +161,16 @@ func (h *DeviceHandler) Register(w http.ResponseWriter, r *http.Request) {
 	device, err := h.svc.Get(r.Context(), req.DeviceID)
 	if err != nil {
 		if errors.Is(err, repository.ErrNotFound) {
-			resp := map[string]interface{}{
-				"message":   "device not found",
-				"device_id": req.DeviceID,
+			resp := model.RegisterResponse{
+				Message:   "device not found",
+				DeviceID: req.DeviceID,
 			}
 			jsonResponse(w, resp, http.StatusNotFound)
 			return
 		}
-		resp := map[string]interface{}{
-			"message":   "internal error",
-			"device_id": req.DeviceID,
+		resp := model.RegisterResponse{
+			Message:   "internal error",
+			DeviceID: req.DeviceID,
 		}
 		jsonResponse(w, resp, http.StatusInternalServerError)
 		return
@@ -177,33 +178,84 @@ func (h *DeviceHandler) Register(w http.ResponseWriter, r *http.Request) {
 
 	if device.Status == model.StatusActive {
 		_ = h.svc.TouchLastSeen(r.Context(), req.DeviceID)
-		resp := map[string]interface{}{
-			"status":    device.Status,
-			"message":   "device active, timestamp updated",
-			"device_id": req.DeviceID,
+		resp := model.RegisterResponse{
+			Status:    device.Status,
+			Message:   "device active, timestamp updated",
+			DeviceID: req.DeviceID,
 		}
 		jsonResponse(w, resp, http.StatusOK)
 		return
 	}
 
-	resp := map[string]interface{}{
-		"status":    device.Status,
-		"device_id": req.DeviceID,
+	resp := model.RegisterResponse{
+		Status:    device.Status,
+		DeviceID: req.DeviceID,
 	}
 	switch device.Status {
 	case model.StatusRevoked:
-		resp["message"] = "device revoked"
+		resp.Message = "device revoked"
 		jsonResponse(w, resp, http.StatusConflict)
 	case model.StatusSuspended:
-		resp["message"] = "device suspended"
+		resp.Message = "device suspended"
 		jsonResponse(w, resp, http.StatusConflict)
 	case model.StatusPendingApproval:
-		resp["message"] = "device pending approval"
+		resp.Message = "device pending approval"
 		jsonResponse(w, resp, http.StatusAccepted)
 	default:
-		resp["message"] = "device status not supported"
+		resp.Message = "device status not supported"
 		jsonResponse(w, resp, http.StatusConflict)
 	}
+}
+
+// POST /me/devices/{device_id}/register/renew-code
+func (h *DeviceHandler) RenewCode(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		jsonError(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	// userID extrait du JWT par le middleware
+	userID, ok := r.Context().Value(ctxkeys.UserID).(string)
+	if !ok || userID == "" {
+		jsonError(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
+
+	h.logger.Info("register device request", zap.String("user_id", userID))
+
+	var req discoverRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil && !errors.Is(err, io.EOF) {
+		resp := model.RegisterResponse{
+			Message: "invalid request body",
+		}
+		jsonResponse(w, resp, http.StatusBadRequest)
+		return
+	}
+
+	renewCodereq := model.RenewCodeRequest{
+		UserID:             userID,
+		DeviceID:           req.DeviceID,
+	}
+
+	// Extract email from JWT context (Architecture B — email challenge)
+	if email, ok := r.Context().Value(ctxkeys.Email).(string); ok {
+		renewCodereq.Email = email
+	}
+
+	if err := h.svc.RenewOTPCode(r.Context(), renewCodereq); err != nil {
+		resp := model.RenewCodeResponse{
+			Message: err.Error(),
+		}
+		jsonResponse(w, resp, http.StatusBadRequest)
+		return
+	}
+
+	resp := model.RenewCodeResponse{
+		Message: "code resent",
+	}
+
+	jsonResponse(w, resp, http.StatusAccepted)
+
 }
 
 // GET /devices/{device_id}
@@ -246,6 +298,9 @@ func (h *DeviceHandler) Status(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if sr.Status == model.StatusPendingApproval {
+		sr.ApprovalMethods = h.svc.GetDevicePendingApprovalMethods()
+	}
 	jsonResponse(w, sr, http.StatusOK)
 }
 

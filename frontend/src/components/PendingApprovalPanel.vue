@@ -5,13 +5,20 @@
       Entrez-le ci-dessous pour approuver le device <strong>{{ deviceId.slice(0, 8) }}…</strong>,
       ou attendez qu'un autre appareil de confiance l'approuve.
     </p>
-    <form class="verify-form" @submit.prevent="submitCode">
-      <input v-model="code" type="text" inputmode="numeric" maxlength="6" placeholder="Code à 6 chiffres"
-        :disabled="busy" autocomplete="one-time-code" />
-      <button type="submit" :disabled="busy || code.length < 6">
-        {{ busy ? 'Vérification…' : 'Valider le code' }}
-      </button>
-    </form>
+    <div>
+      <form class="verify-form" @submit.prevent="submitCode">
+        <input v-model="code" type="text" inputmode="numeric" maxlength="6" placeholder="Code à 6 chiffres"
+          :disabled="busy" autocomplete="one-time-code" />
+        <button type="submit" :disabled="busy || code.length < 6">
+          {{ busy ? 'Vérification…' : 'Valider le code' }}
+        </button>
+      </form>
+      <form class="renew-form" @submit.prevent="renewCode">
+        <button type="submit" :disabled="busy">
+          {{ busy ? 'Renouvellement…' : 'Renouveler' }}
+        </button>
+      </form>
+    </div>
     <StatusBanner v-if="msg" :type="msgType" :message="msg" />
   </div>
 </template>
@@ -27,7 +34,8 @@ const emit = defineEmits(['approved'])
 const api = useDeviceApi()
 
 const code = ref('')
-const busy = ref(false)
+const busyValidate = ref(false)
+const busyRenew = ref(false)
 const msg = ref('')
 const msgType = ref('info')
 
@@ -49,7 +57,7 @@ async function poll() {
 }
 
 async function submitCode() {
-  busy.value = true
+  busyValidate.value = true
   msg.value = ''
   try {
     await api.verifyEmailCode(props.deviceId, code.value)
@@ -61,7 +69,22 @@ async function submitCode() {
     msgType.value = 'ko'
     msg.value = err.message ?? String(err)
   } finally {
-    busy.value = false
+    busyValidate.value = false
+  }
+}
+
+async function renewCode() {
+  busyRenew.value = true
+  msg.value = ''
+  try {
+    await api.renewEmailCode(props.deviceId)
+    if (pollTimer) clearInterval(pollTimer)
+    msgType.value = 'ok'
+  } catch (err: any) {
+    msgType.value = 'ko'
+    msg.value = err.message ?? String(err)
+  } finally {
+    busyRenew.value = false
   }
 }
 </script>
