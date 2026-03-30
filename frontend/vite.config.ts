@@ -19,6 +19,14 @@ export default defineConfig({
     watch: {
       usePolling: true,  // nécessaire dans certains environnements Docker/WSL
     },
+    proxy: {
+      // Proxy API calls to the backend server
+      '/metrics': {
+        target: 'http://device-service:8080',
+        changeOrigin: true,
+        secure: false,
+      },
+    }
   }
 })
 

@@ -14,6 +14,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
+	"github.com/go-chi/metrics"
 	"go.uber.org/zap"
 
 	"github.com/ia-generative/device-service/internal/cache"
@@ -68,6 +69,16 @@ func main() {
 
 	// Router
 	r := chi.NewRouter()
+
+	// Collect metrics for incoming HTTP requests automatically.
+	r.Use(metrics.Collector(metrics.CollectorOpts{
+		Host:  false,
+		Proto: true,
+		Skip: func(r *http.Request) bool {
+			return r.Method != "OPTIONS"
+		},
+	}))
+	
 	r.Use(authmw.CORS(authmw.CORSOptions{
 		AllowedOrigins:   cfg.CORSAllowedOrigins,
 		AllowedMethods:   cfg.CORSAllowedMethods,
@@ -84,6 +95,7 @@ func main() {
 	r.Get("/healthz", probeHandler.Liveness)
 	r.Get("/readyz", probeHandler.Readiness)
 	r.Get("/api/discover", discoverHandler.Discover)	
+	r.Handle("/metrics", metrics.Handler())
 
 	// Device endpoints (JWT requis)
 	r.Group(func(r chi.Router) {
