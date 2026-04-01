@@ -33,16 +33,17 @@ type discoverRequest struct {
 	ChallengeSignature string `json:"challenge_signature,omitempty"`
 }
 
-func (h *DiscoverHandler) baseResponse(clientID, redirectURI, deviceID string) map[string]interface{} {
+func (h *DiscoverHandler) baseResponse(clientID string) map[string]interface{} {
 	authBaseURL := strings.TrimRight(h.cfg.KeycloakPublicURI, "/")
+	authPath := "/realms/" + h.cfg.KeycloakRealm + "/protocol/openid-connect/auth"
 	tokenPath := "/realms/" + h.cfg.KeycloakRealm + "/protocol/openid-connect/token"
+	logoutPath := "/realms/" + h.cfg.KeycloakRealm + "/protocol/openid-connect/logout"
 
 	return map[string]interface{}{
-		"realm":         h.cfg.KeycloakRealm,
+		"auth_url":      authBaseURL + authPath,
+		"token_url":     authBaseURL + tokenPath,
+		"logout_url":    authBaseURL + logoutPath,
 		"client_id":     clientID,
-		"redirect_uri":  redirectURI,
-		"auth_base_url": authBaseURL,
-		"token_path":    tokenPath,
 	}
 }
 
@@ -53,6 +54,6 @@ func (h *DiscoverHandler) Discover(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	resp := h.baseResponse(h.cfg.KeycloakClientID, h.cfg.KeycloakRedirectURI, "")
+	resp := h.baseResponse(h.cfg.KeycloakClientID)
 	jsonResponse(w, resp, http.StatusOK)
 }

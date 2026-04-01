@@ -47,15 +47,15 @@ export function clearPendingOAuth() {
  * Builds the Keycloak authorization URL and saves pending state.
  * Returns the URL string.
  */
-export async function buildAuthUrl(discover, { redirectUri, deviceId = '' }: { redirectUri?: string, deviceId?: string } = {}) {
+export async function buildAuthUrl(discover, { redirectUri }: { redirectUri?: string } = {}) {
   const state = randomString(24)
   const nonce = randomString(24)
   const codeVerifier = randomString(64)
   const codeChallenge = await sha256Base64Url(codeVerifier)
 
-  savePendingOAuth({ state, nonce, codeVerifier, redirectUri, discover, deviceId })
+  savePendingOAuth({ state, nonce, codeVerifier, redirectUri, discover })
 
-  const url = new URL(`${discover.auth_base_url}/realms/${encodeURIComponent(discover.realm)}/protocol/openid-connect/auth`)
+  const url = new URL(discover.auth_url)
   url.searchParams.set('client_id', discover.client_id)
   url.searchParams.set('redirect_uri', redirectUri)
   url.searchParams.set('response_type', 'code')
@@ -64,7 +64,6 @@ export async function buildAuthUrl(discover, { redirectUri, deviceId = '' }: { r
   url.searchParams.set('nonce', nonce)
   url.searchParams.set('code_challenge', codeChallenge)
   url.searchParams.set('code_challenge_method', 'S256')
-  if (deviceId) url.searchParams.set('device_id', deviceId)
 
   return url.toString()
 }
@@ -86,7 +85,7 @@ export async function exchangeCode(code, state) {
     code_verifier: pending.codeVerifier
   })
 
-  const tokenEndpoint = `${pending.discover.auth_base_url}${pending.discover.token_path}`
+  const tokenEndpoint = pending.discover.token_url
   const resp = await fetch(tokenEndpoint, {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },

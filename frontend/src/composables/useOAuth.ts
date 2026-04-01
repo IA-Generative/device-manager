@@ -3,24 +3,29 @@ import { apiFetch, DEVICE_SERVICE_BASE_URL } from '@/lib/api'
 import { buildAuthUrl, exchangeCode, hasOAuthCallbackParams, clearOAuthQueryParams } from '@/lib/oauth'
 import { useDeviceStore } from '@/stores/device'
 
+type DiscoverData = {
+  auth_url: string
+  token_url: string
+  client_id: string
+  logout_url: string
+}
 export function useOAuth() {
   const auth = useAuthStore()
-  const device = useDeviceStore()
 
-  async function discover() {
+  async function discover(): Promise<DiscoverData> {
     console.log(`${DEVICE_SERVICE_BASE_URL}/discover`);
     
     const data = await apiFetch(`${DEVICE_SERVICE_BASE_URL}/discover`)
-    if (!data.auth_base_url || !data.realm || !data.client_id) throw new Error('/discover incomplet')
+    if (!data.auth_url || !data.token_url || !data.client_id || !data.logout_url) throw new Error('/discover incomplet')
     return data
   }
 
   async function redirectToLogin(options: { redirectUri?: string } = {}) {
     const disc = await discover()
+    
     const redirectUri = options.redirectUri ?? `${window.location.origin}/`
     const url = await buildAuthUrl(disc, {
       redirectUri,
-      deviceId: device.deviceId
     })
     window.location.assign(url)
   }
@@ -53,7 +58,7 @@ export function useOAuth() {
     const disc = await discover()
     const postLogoutUri = window.location.origin + window.location.pathname
     auth.clear()
-    const url = new URL(`${disc.auth_base_url}/realms/${encodeURIComponent(disc.realm)}/protocol/openid-connect/logout`)
+    const url = new URL(`${disc.logout_url}`)
     url.searchParams.set('client_id', disc.client_id)
     url.searchParams.set('post_logout_redirect_uri', postLogoutUri)
     window.location.assign(url.toString())
