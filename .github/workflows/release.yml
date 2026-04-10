@@ -15,6 +15,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       release-created: ${{ steps.release.outputs.release_created }}
+      version: ${{ steps.release.outputs.version }}
       major-tag: ${{ steps.release.outputs.major }}
       minor-tag: ${{ steps.release.outputs.minor }}
       patch-tag: ${{ steps.release.outputs.patch }}
@@ -29,7 +30,7 @@ jobs:
       uses: googleapis/release-please-action@v4
       with:
         target-branch: main
-        token: ${{ secrets.SECRET_GITHUB_TOKEN }}
+        token: ${{ secrets.GITHUB_TOKEN }}
     - name: Export PR branch name
       id: export-pr
       run: |
@@ -49,7 +50,7 @@ jobs:
     - name: Update Chart.yaml with new version and document it
       if: ${{ steps.export-pr.outputs.pr_branch_name }}
       run: |
-        export VERSION=$(echo "${{ steps.release.outputs.tag_name }}" | sed 's/^v//')
+        export VERSION=$(jq -r '.["."]' .release-please-manifest.json )
         yq e -i '.appVersion = env(VERSION)' helm/Chart.yaml
 
         CHART_VERSION=$(yq .version helm/Chart.yaml)
